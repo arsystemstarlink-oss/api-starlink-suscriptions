@@ -9,6 +9,18 @@ import type { CronScheduleConfig, RequestContext } from "../../domain/models.js"
 const DEFAULT_HOUR = 8;
 const DEFAULT_MINUTE = 0;
 
+function buildDefaultConfig(organizationId: string): CronScheduleConfig {
+  return {
+    id: "daily",
+    organizationId,
+    scheduledHour: DEFAULT_HOUR,
+    scheduledMinute: DEFAULT_MINUTE,
+    isActive: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 /**
  * Genera una expresión cron a partir de hora y minuto en formato 24h.
  * @param hour - Hora del día (0–23, formato 24).
@@ -52,7 +64,7 @@ class SchedulerService {
 
     if (!config) {
       console.log("⏰ Cron: sin configuración. Ejecución automática desactivada.");
-      this.currentConfig = null;
+      this.currentConfig = buildDefaultConfig(env.ORGANIZATION_ID);
       return;
     }
 
@@ -168,17 +180,17 @@ class SchedulerService {
 
   /**
    * Obtiene el estado actual del scheduler sin consultar Firestore (usa config en memoria).
+   * Siempre devuelve valores por defecto si no hay configuración activa.
    * @returns Objeto con `isRunning`, `config`, `scheduledTime` (formato `"HH:MM"` 24h) y `timezone`.
    */
   getStatus() {
-    const config = this.currentConfig;
-    const isActive = config?.isActive ?? false;
+    const config = this.currentConfig ?? buildDefaultConfig(env.ORGANIZATION_ID);
 
     return {
       isRunning: this.task !== null,
       config,
-      scheduledTime: isActive ? formatScheduledTime(config!.scheduledHour, config!.scheduledMinute) : undefined,
-      timezone: isActive ? env.TIMEZONE : undefined
+      scheduledTime: formatScheduledTime(config.scheduledHour, config.scheduledMinute),
+      timezone: env.TIMEZONE
     };
   }
 
