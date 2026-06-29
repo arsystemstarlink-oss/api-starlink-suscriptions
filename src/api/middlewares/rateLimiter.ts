@@ -5,6 +5,7 @@ export const globalRateLimiter = rateLimit({
   limit: 100,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     error: {
       code: "RATE_LIMIT_EXCEEDED",
@@ -18,6 +19,7 @@ export const loginRateLimiter = rateLimit({
   limit: 5,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     error: {
       code: "RATE_LIMIT_EXCEEDED",
