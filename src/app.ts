@@ -9,7 +9,6 @@ import { authPublicRouter, authRouter } from "./api/routes/authRoutes.js";
 import { webhookRouter } from "./api/routes/communicationRoutes.js";
 import { globalRateLimiter, loginRateLimiter } from "./api/middlewares/rateLimiter.js";
 import { schedulerService } from "./services/cron/schedulerService.js";
-import { schedulerService } from "./services/cron/schedulerService.js";
 
 const app = express();
 
