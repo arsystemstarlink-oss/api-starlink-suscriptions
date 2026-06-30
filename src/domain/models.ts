@@ -91,7 +91,6 @@ export interface Payment {
   exchangeRate: number;
   amountUsd: number;
   reference: string;
-  proofImage?: string;
   paidAt: string;
   createdBy: string;
   confirmedBy?: string;

@@ -4,6 +4,31 @@ Registro de mejoras y cambios realizados en la API para preparación de desplieg
 
 ## [Unreleased]
 
+### 2026-06-30 — Remover `proofImage` del registro de pagos
+
+**Problema:** Firebase Storage requiere un plan de pago. Cargar imágenes de comprobantes ya no es viable.
+
+**Solución:** Se elimina el campo `proofImage` por completo del flujo de registro de pagos. La referencia del pago (`reference`) es suficiente para identificar el pago.
+
+**Cambios:**
+
+- `package.json` — removidos `multer` y `@types/multer`
+- `src/config/env.ts` — removida variable `FIREBASE_STORAGE_BUCKET`
+- `src/config/firebase.ts` — removida función `getStorageBucket()` y el import de `firebase-admin/storage`
+- `src/services/storage/` — eliminado (storageService)
+- `src/api/middlewares/uploadProofImage.ts` — eliminado
+- `src/api/routes/subscriptionRoutes.ts` — endpoint vuelve a aceptar `application/json` sin upload de archivo
+- `src/api/validators/schemas.ts` — `proofImage` removido del `registerPaymentSchema`
+- `src/services/payments/paymentService.ts` — `proofImage` removido del input de `register()` y del `paymentRepository.create()`
+- `src/domain/models.ts` — campo `proofImage` removido de la interfaz `Payment`
+- `.env.example` — removida variable `FIREBASE_STORAGE_BUCKET`
+- `starlink-subscription-api-plan.md` — documentación actualizada: sin `proofImage`, endpoint vuelve a JSON
+- `src/tests/` — tests revertidos a JSON, eliminados mocks de storage
+
+**Tests:** 140 tests pasando.
+
+---
+
 ### 2026-06-28 — Mejoras de arquitectura P1
 
 **Mejoras implementadas:**

@@ -39,7 +39,6 @@ export const registerPaymentSchema = z.object({
   }),
   exchangeRate: z.coerce.number().positive("La tasa de cambio debe ser mayor a 0"),
   reference: z.string().min(1, "La referencia es obligatoria"),
-  proofImage: z.string().min(1, "La imagen del comprobante es obligatoria"),
   paidAt: z.string().optional()
 });
 

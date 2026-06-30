@@ -44,7 +44,6 @@ export const paymentService = {
     currency: Payment["currency"];
     exchangeRate: number;
     reference: string;
-    proofImage: string;
     paidAt?: string;
   }) {
     const period = await billingPeriodRepository.getById(input.context.organizationId, input.billingPeriodId);
@@ -78,7 +77,6 @@ export const paymentService = {
       exchangeRate: input.exchangeRate,
       amountUsd,
       reference: input.reference,
-      proofImage: input.proofImage,
       paidAt: input.paidAt ?? new Date().toISOString(),
       createdBy: input.context.userId,
       status: PaymentStatus.Registered

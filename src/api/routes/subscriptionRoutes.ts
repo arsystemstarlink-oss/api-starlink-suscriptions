@@ -108,7 +108,6 @@ subscriptionRouter.post(
       currency: req.body.currency,
       exchangeRate: req.body.exchangeRate,
       reference: req.body.reference,
-      proofImage: req.body.proofImage,
       paidAt: req.body.paidAt
     });
     res.status(201).json({

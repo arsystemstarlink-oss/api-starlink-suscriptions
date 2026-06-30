@@ -206,7 +206,6 @@ Campos principales:
 - `exchangeRate`
 - `amountUsd`
 - `reference`
-- `proofImage`
 - `paidAt`
 - `createdBy`
 - `confirmedBy`
@@ -225,8 +224,7 @@ Estados:
 Reglas:
 
 - Solo pagos `confirmed` afectan deuda, estados, mora, prorrata y reactivación.
-- `reference` obligatorio.
-- `proofImage` obligatorio (URL de la imagen del comprobante).
+- `reference` obligatorio (cadena libre, usada para identificar el pago de forma única).
 - `exchangeRate` obligatorio (se usa para calcular `amountUsd`).
 - `amount > 0`.
 - `amountUsd = amount * exchangeRate`.
@@ -1365,7 +1363,6 @@ Request:
   "currency": "USD",
   "exchangeRate": 1,
   "reference": "REF-001",
-  "proofImage": "https://storage/proof.jpg",
   "paidAt": "2026-05-30T12:00:00Z"
 }
 ```
@@ -1377,7 +1374,6 @@ Validaciones:
 - `currency` — `"USD"` | `"USDT"` | `"Bs"` | `"Zinli"`
 - `exchangeRate > 0`
 - `reference` obligatorio
-- `proofImage` obligatorio (URL del comprobante)
 - `paidAt` opcional (ISO 8601), default ahora
 
 Respuesta (`201`):
@@ -1815,7 +1811,6 @@ Respuesta (`200`):
       "exchangeRate": 1,
       "amountUsd": 120,
       "reference": "REF-001",
-      "proofImage": "https://storage/proof.jpg",
       "paidAt": "2026-05-30T12:00:00.000Z",
       "status": "confirmed",
       "confirmedAt": "2026-05-30T12:05:00.000Z"

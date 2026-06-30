@@ -601,14 +601,13 @@ describe("Integration: payment routes", () => {
       const { sub, period } = await seed();
       const res = await request(app).post(`/api/subscriptions/${sub.id}/payments`)
         .set(authHeaders(adminToken))
-        .send({ 
-          billingPeriodId: period.id, 
-          amount: 50, 
-          currency: "USD", 
-          exchangeRate: 1, 
-          reference: "REF-001", 
-          proofImage: "https://example.com/proof.jpg",
-          paidAt: "2026-01-15T12:00:00Z" 
+        .send({
+          billingPeriodId: period.id,
+          amount: 50,
+          currency: "USD",
+          exchangeRate: 1,
+          reference: "REF-001",
+          paidAt: "2026-01-15T12:00:00Z"
         });
       expect(res.status).toBe(201);
       expect(res.body.status).toBe("registered");
@@ -618,28 +617,12 @@ describe("Integration: payment routes", () => {
       const { sub, period } = await seed();
       const res = await request(app).post(`/api/subscriptions/${sub.id}/payments`)
         .set(authHeaders(adminToken))
-        .send({ 
-          billingPeriodId: period.id, 
-          amount: 50, 
-          currency: "USD", 
-          reference: "REF-002", 
-          proofImage: "https://example.com/proof.jpg",
-          paidAt: "2026-01-15T12:00:00Z" 
-        });
-      expect(res.status).toBe(400);
-    });
-
-    it("returns 400 when proofImage is missing", async () => {
-      const { sub, period } = await seed();
-      const res = await request(app).post(`/api/subscriptions/${sub.id}/payments`)
-        .set(authHeaders(adminToken))
-        .send({ 
-          billingPeriodId: period.id, 
-          amount: 50, 
-          currency: "USD", 
-          exchangeRate: 1,
-          reference: "REF-003", 
-          paidAt: "2026-01-15T12:00:00Z" 
+        .send({
+          billingPeriodId: period.id,
+          amount: 50,
+          currency: "USD",
+          reference: "REF-002",
+          paidAt: "2026-01-15T12:00:00Z"
         });
       expect(res.status).toBe(400);
     });
