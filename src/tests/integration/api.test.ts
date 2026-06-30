@@ -89,7 +89,7 @@ describe("Integration: auth routes", () => {
 
     it("creates client user with clientId", async () => {
       const client = await mockRepos.clientRepository.create({
-        organizationId: "test-org", name: "Portal Client", phone: "+5841499", dni: "D-PORTAL", address: "Addr"
+        organizationId: "test-org", name: "Portal Client", phone: "+5841499", dni: "D-PORTAL", address: "Addr", email: "portal@test.com"
       });
       const res = await request(app).post("/api/auth/register")
         .set(authHeaders(adminToken))
@@ -129,6 +129,73 @@ describe("Integration: auth routes", () => {
         .set(authHeaders(adminToken))
         .send({ email: "dup@test.com", password: "password456", name: "Dup" });
       expect(res.status).toBe(409);
+    });
+  });
+
+  describe("POST /api/auth/register-client", () => {
+    it("creates client and user in one request", async () => {
+      const res = await request(app).post("/api/auth/register-client").set(authHeaders(adminToken))
+        .send({
+          name: "Juan Pérez",
+          dni: "V-12345678",
+          phone: "+584141234567",
+          address: "Av. Principal 123",
+          email: "juan@starlink.com",
+          password: "password123"
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.client).toBeDefined();
+      expect(res.body.client.name).toBe("Juan Pérez");
+      expect(res.body.client.dni).toBe("V-12345678");
+      expect(res.body.user).toBeDefined();
+      expect(res.body.user.email).toBe("juan@starlink.com");
+      expect(res.body.user.role).toBe("client");
+      expect(res.body.user.clientId).toBe(res.body.client.id);
+    });
+
+    it("returns 400 for missing required fields", async () => {
+      const res = await request(app).post("/api/auth/register-client").set(authHeaders(adminToken))
+        .send({
+          name: "Incomplete",
+          email: "incomplete@test.com",
+          password: "password123"
+        });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 409 for duplicate email", async () => {
+      await request(app).post("/api/auth/register-client").set(authHeaders(adminToken))
+        .send({
+          name: "First",
+          dni: "V-11111111",
+          phone: "+584141111111",
+          address: "Addr 1",
+          email: "duplicate@test.com",
+          password: "password123"
+        });
+      const res = await request(app).post("/api/auth/register-client").set(authHeaders(adminToken))
+        .send({
+          name: "Second",
+          dni: "V-22222222",
+          phone: "+584142222222",
+          address: "Addr 2",
+          email: "duplicate@test.com",
+          password: "password456"
+        });
+      expect(res.status).toBe(409);
+    });
+
+    it("requires admin authentication", async () => {
+      const res = await request(app).post("/api/auth/register-client")
+        .send({
+          name: "Public Client",
+          dni: "V-33333333",
+          phone: "+584143333333",
+          address: "Public Addr",
+          email: "public@test.com",
+          password: "password123"
+        });
+      expect(res.status).toBe(403);
     });
   });
 
@@ -175,9 +242,9 @@ describe("Integration: client routes", () => {
 
   describe("GET /api/clients", () => {
     it("returns paginated list", async () => {
-      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Alice", phone: "+584141", dni: "D-001", address: "A1" });
-      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Bob", phone: "+584142", dni: "D-002", address: "A2" });
-      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Carol", phone: "+584143", dni: "D-003", address: "A3" });
+      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Alice", phone: "+584141", dni: "D-001", address: "A1", email: "alice@test.com" });
+      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Bob", phone: "+584142", dni: "D-002", address: "A2", email: "bob@test.com" });
+      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Carol", phone: "+584143", dni: "D-003", address: "A3", email: "carol@test.com" });
       const res = await request(app).get("/api/clients").set(authHeaders(adminToken));
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(3);
@@ -186,7 +253,7 @@ describe("Integration: client routes", () => {
 
     it("paginates with page/limit", async () => {
       for (let i = 1; i <= 5; i++) {
-        await mockRepos.clientRepository.create({ organizationId: "test-org", name: `C${i}`, phone: `+584140${i}`, dni: `D-${i}`, address: `A${i}` });
+        await mockRepos.clientRepository.create({ organizationId: "test-org", name: `C${i}`, phone: `+584140${i}`, dni: `D-${i}`, address: `A${i}`, email: `c${i}@test.com` });
       }
       const res = await request(app).get("/api/clients?page=2&limit=2").set(authHeaders(adminToken));
       expect(res.status).toBe(200);
@@ -205,7 +272,7 @@ describe("Integration: client routes", () => {
   describe("POST /api/clients", () => {
     it("creates a client", async () => {
       const res = await request(app).post("/api/clients").set(authHeaders(adminToken))
-        .send({ name: "New", dni: "12345678", phone: "+584149999", address: "Main" });
+        .send({ name: "New", dni: "12345678", phone: "+584149999", address: "Main", email: "new@test.com" });
       expect(res.status).toBe(201);
       expect(res.body.name).toBe("New");
     });
@@ -216,16 +283,16 @@ describe("Integration: client routes", () => {
     });
 
     it("returns 409 for duplicate phone", async () => {
-      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Existing", phone: "+584140001111", dni: "D-EXIST", address: "A" });
+      await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Existing", phone: "+584140001111", dni: "D-EXIST", address: "A", email: "existing@test.com" });
       const res = await request(app).post("/api/clients").set(authHeaders(adminToken))
-        .send({ name: "Dup", dni: "D-DUP", phone: "+584140001111", address: "B" });
+        .send({ name: "Dup", dni: "D-DUP", phone: "+584140001111", address: "B", email: "dup@test.com" });
       expect(res.status).toBe(409);
     });
   });
 
   describe("GET /api/clients/:clientId", () => {
     it("returns client with subscriptions", async () => {
-      const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Target", phone: "+584142222", dni: "D-TARGET", address: "A" });
+      const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Target", phone: "+584142222", dni: "D-TARGET", address: "A", email: "target@test.com" });
       await mockRepos.subscriptionRepository.create({
         organizationId: "test-org", starlinkAccountId: "SUB-001", kitId: "kit",
         planId: "plan", planName: "Basic", clientId: client.id, priceUsd: 50,
@@ -242,7 +309,7 @@ describe("Integration: client routes", () => {
 
   describe("DELETE /api/clients/:clientId", () => {
     it("returns 204 after delete", async () => {
-      const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Del", phone: "+584145555", dni: "D-DEL", address: "A" });
+      const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Del", phone: "+584145555", dni: "D-DEL", address: "A", email: "del@test.com" });
       const res = await request(app).delete(`/api/clients/${client.id}`).set(authHeaders(adminToken));
       expect(res.status).toBe(204);
     });
@@ -335,7 +402,7 @@ describe("Integration: subscription routes", () => {
   const adminToken = makeAdminToken();
 
   const seed = async () => {
-    const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584140000001", dni: "V-123", address: "Addr" });
+    const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584140000001", dni: "V-123", address: "Addr", email: "client@test.com" });
     const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
     return { client, plan };
   };
@@ -348,7 +415,7 @@ describe("Integration: subscription routes", () => {
     it("creates subscription with billing period", async () => {
       const { client, plan } = await seed();
       const res = await request(app).post("/api/subscriptions").set(authHeaders(adminToken))
-        .send({ clientId: client.id, starlinkAccountId: "STAR-001", kitId: "KIT", planId: plan.id, dueDay: 15, starlinkEmail: "test@starlink.com", starlinkPassword: "pass" });
+        .send({ clientId: client.id, starlinkAccountId: "STAR-001", kitId: "KIT", planId: plan.id, dueDay: 15, starlinkPassword: "pass" });
       expect(res.status).toBe(201);
       expect(res.body.subscriptionId).toBeDefined();
       expect(res.body.status).toBe("paused");
@@ -365,13 +432,13 @@ describe("Integration: subscription routes", () => {
         starlinkEmail: "dup@starlink.com", starlinkPassword: "pass"
       });
       const res = await request(app).post("/api/subscriptions").set(authHeaders(adminToken))
-        .send({ clientId: client.id, starlinkAccountId: "DUP", kitId: "k2", planId: plan.id, dueDay: 15, starlinkEmail: "dup@starlink.com", starlinkPassword: "pass" });
+        .send({ clientId: client.id, starlinkAccountId: "DUP", kitId: "k2", planId: plan.id, dueDay: 15, starlinkPassword: "pass" });
       expect(res.status).toBe(409);
     });
 
     it("returns 403 without JWT", async () => {
       const res = await request(app).post("/api/subscriptions")
-        .send({ clientId: "x", starlinkAccountId: "x", kitId: "x", planId: "x", dueDay: 15, starlinkEmail: "x@starlink.com", starlinkPassword: "pass" });
+        .send({ clientId: "x", starlinkAccountId: "x", kitId: "x", planId: "x", dueDay: 15, starlinkPassword: "pass" });
       expect(res.status).toBe(403);
     });
   });
@@ -501,7 +568,7 @@ describe("Integration: payment routes", () => {
   const adminToken = makeAdminToken();
 
   const seed = async () => {
-    const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584141", dni: "D-C", address: "A" });
+    const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584141", dni: "D-C", address: "A", email: "d-c@test.com" });
     const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
     const sub = await mockRepos.subscriptionRepository.create({
       organizationId: "test-org", starlinkAccountId: "PAY-SUB", kitId: "k",
@@ -620,7 +687,7 @@ describe("Integration: payment routes", () => {
 describe("Integration: client portal routes", () => {
   const seedPortal = async () => {
     const client = await mockRepos.clientRepository.create({
-      organizationId: "test-org", name: "Portal Client", phone: "+58414777", dni: "D-PORTAL", address: "Portal St"
+      organizationId: "test-org", name: "Portal Client", phone: "+58414777", dni: "D-PORTAL", address: "Portal St", email: "portal-client@test.com"
     });
     const plan = await mockRepos.planRepository.create({
       organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true
@@ -676,7 +743,7 @@ describe("Integration: client portal routes", () => {
 
     it("returns null subscription when client has no subscriptions", async () => {
       const client = await mockRepos.clientRepository.create({
-        organizationId: "test-org", name: "No Sub", phone: "+58414888", dni: "D-NOSUB", address: "Empty"
+        organizationId: "test-org", name: "No Sub", phone: "+58414888", dni: "D-NOSUB", address: "Empty", email: "nosub@test.com"
       });
       const clientToken = makeClientToken("test-org", "user-nosub", client.id);
       const res = await request(app).get("/api/client/subscription").set(authHeaders(clientToken));

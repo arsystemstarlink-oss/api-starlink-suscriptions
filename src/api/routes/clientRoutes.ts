@@ -45,7 +45,8 @@ clientRouter.post(
       name: req.body.name,
       dni: req.body.dni,
       phone: req.body.phone,
-      address: req.body.address
+      address: req.body.address,
+      email: req.body.email
     });
     res.status(201).json(client);
   })

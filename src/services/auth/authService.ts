@@ -238,5 +238,75 @@ export const authService = {
   async listUsers(context: RequestContext): Promise<UserPublic[]> {
     const users = await userRepository.list(context.organizationId);
     return users.map(({ passwordHash, ...rest }) => rest);
+  },
+
+  /**
+   * Registra un nuevo cliente completo con credenciales de acceso.
+   *
+   * Este método unifica la creación del Client (entidad de negocio) y el User (entidad de autenticación)
+   * en un solo flujo atómico. El cliente podrá inmediatamente hacer login.
+   *
+   * Flujo:
+   * 1. Valida que el email sea único y tenga formato válido.
+   * 2. Valida password mínimo 6 caracteres.
+   * 3. Crea el Client con los datos del negocio.
+   * 4. Crea el User con role=client vinculado al Client.
+   *
+   * @throws {@link BusinessRuleError} si el email ya existe, el formato es inválido,
+   * o el password es muy corto.
+   */
+  async registerClient(input: {
+    context: RequestContext;
+    name: string;
+    dni: string;
+    phone: string;
+    address: string;
+    email: string;
+    password: string;
+  }): Promise<{ client: import("../../domain/models.js").Client; user: UserPublic }> {
+    const { email, password, name, dni, phone, address } = input;
+
+    if (!EMAIL_REGEX.test(email)) {
+      throw new BusinessRuleError("Email inválido");
+    }
+
+    if (password.length < 6) {
+      throw new BusinessRuleError("El password debe tener al menos 6 caracteres");
+    }
+
+    const existing = await userRepository.getByEmail(input.context.organizationId, email);
+    if (existing) {
+      throw new BusinessRuleError("Ya existe un usuario con ese email");
+    }
+
+    const { clientService } = await import("../clients/clientService.js");
+
+    const client = await clientService.create({
+      context: input.context,
+      name,
+      dni,
+      phone,
+      address,
+      email
+    });
+
+    const passwordHash = await hashPassword(password);
+
+    const user = await userRepository.create({
+      organizationId: input.context.organizationId,
+      email,
+      passwordHash,
+      name,
+      role: UserRole.Client,
+      clientId: client.id,
+      isActive: true
+    });
+
+    const { passwordHash: _, ...userPublic } = user;
+
+    return {
+      client,
+      user: userPublic
+    };
   }
 };

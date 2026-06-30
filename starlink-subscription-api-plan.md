@@ -80,6 +80,7 @@ Campos principales:
 - `dni`
 - `phone`
 - `address`
+- `email`
 - `createdAt`
 - `updatedAt`
 
@@ -89,6 +90,7 @@ Reglas:
 - `dni` obligatorio y único por organización.
 - `phone` obligatorio y único por organización.
 - `address` obligatorio.
+- `email` obligatorio y único por organización.
 
 ### Plan
 
@@ -129,8 +131,8 @@ Campos principales:
 - `lateFeeUsd`
 - `currentOwnerName`
 - `currentOwnerDni`
-- `starlinkEmail` — email de la cuenta Starlink (obligatorio, para gestión centralizada de antenas)
-- `starlinkPassword` — password de la cuenta Starlink (obligatorio)
+- `starlinkEmail` — email de la cuenta Starlink (obligatorio, tomado automáticamente del email del cliente)
+- `starlinkPassword` — password de la cuenta Starlink (obligatorio al crear la suscripción)
 - `createdAt`
 - `updatedAt`
 
@@ -145,7 +147,9 @@ Reglas:
 
 - `starlinkAccountId` único por organización (identificador de la cuenta Starlink).
 - `kitId` identifica el equipo/antena física.
-- `starlinkEmail` y `starlinkPassword` son obligatorios y almacenan las credenciales de acceso a la cuenta Starlink para centralizar la gestión de las antenas. No se puede crear una suscripción sin credenciales.
+- `starlinkEmail` se toma automáticamente del email del cliente. El cliente debe tener email asignado antes de crear una suscripción.
+- `starlinkPassword` es el password de la cuenta Starlink (diferente al password del portal del cliente). Se proporciona al crear la suscripción.
+- Juntos, `starlinkEmail` y `starlinkPassword` almacenan las credenciales de acceso a la cuenta Starlink para centralizar la gestión de las antenas.
 - Una suscripción puede tener múltiples períodos, pero solo uno activo de servicio.
 - Puede transferirse sin cambiar `starlinkAccountId`.
 - Al crearla queda `paused` hasta confirmar el primer pago.
@@ -484,6 +488,7 @@ Reglas:
 | GET | `/api/health` | — | 6.1 |
 | POST | `/api/auth/login` | — | 6.2 |
 | POST | `/api/auth/register` | admin | 6.2 |
+| POST | `/api/auth/register-client` | admin | 6.2 |
 | GET | `/api/auth/me` | auth | 6.2 |
 | GET | `/api/auth/users` | admin | 6.2 |
 | PUT | `/api/auth/users/:id/activate` | admin | 6.2 |
@@ -624,6 +629,120 @@ Errores:
 
 - `409` — email ya registrado
 
+#### `POST /api/auth/register-client`
+
+Registrar un nuevo cliente completo con credenciales de acceso. Unifica la creación del Client (entidad de negocio) y el User (entidad de autenticación) en una sola operación. El cliente queda automáticamente vinculado.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "name": "Juan Pérez",
+  "dni": "V-12345678",
+  "phone": "+584141234567",
+  "address": "Av. Principal 123",
+  "email": "juan@starlink.com",
+  "password": "password123"
+}
+```
+
+Validaciones:
+
+- `name` obligatorio
+- `dni` obligatorio y único por organización
+- `phone` obligatorio (mínimo 7 caracteres) y único por organización
+- `address` obligatorio
+- `email` formato email válido, único por organización
+- `password` mínimo 6 caracteres
+- Devuelve `400` si faltan campos obligatorios
+- Devuelve `409` si el email ya existe
+- Devuelve `403` si no tiene permisos de admin
+
+Respuesta (`201`):
+
+```json
+{
+  "client": {
+    "id": "client_123",
+    "organizationId": "default",
+    "name": "Juan Pérez",
+    "dni": "V-12345678",
+    "phone": "+584141234567",
+    "address": "Av. Principal 123",
+    "email": "juan@starlink.com",
+    "createdAt": "2026-06-29T12:00:00.000Z",
+    "updatedAt": "2026-06-29T12:00:00.000Z"
+  },
+  "user": {
+    "id": "user_456",
+    "email": "juan@starlink.com",
+    "name": "Juan Pérez",
+    "role": "client",
+    "clientId": "client_123",
+    "isActive": true,
+    "createdAt": "2026-06-29T12:00:00.000Z",
+    "updatedAt": "2026-06-29T12:00:00.000Z"
+  }
+}
+```
+
+Respuesta detallada:
+
+- `client`: datos del cliente creado (entidad de negocio)
+- `user`: datos del usuario creado (entidad de autenticación), con `role: "client"` y `clientId` vinculado
+
+Errores:
+
+- `400` — campos faltantes o formato inválido
+- `403` — sin permisos de admin
+- `409` — email ya registrado
+
+**Flujo completo desde el frontend:**
+
+```
+1. Admin envía POST /api/auth/register-client con datos del cliente + email + password
+2. Backend crea automáticamente:
+   - Client (entidad de negocio)
+   - User con role=client vinculado al Client
+3. Backend devuelve datos del client + datos del user
+4. Admin proporciona las credenciales (email/password) al cliente
+5. Cliente inicia sesión con POST /api/auth/login
+```
+
+**Ejemplo de uso:**
+
+```bash
+# Admin registra un nuevo cliente
+POST /api/auth/register-client
+Authorization: Bearer admin-jwt-token
+{
+  "name": "Juan Pérez",
+  "dni": "V-12345678",
+  "phone": "+584141234567",
+  "address": "Av. Principal 123",
+  "email": "juan@starlink.com",
+  "password": "password123"
+}
+
+# Respuesta: { "client": {...}, "user": {...} }
+
+# El admin proporciona las credenciales al cliente
+# El cliente inicia sesión
+POST /api/auth/login
+{
+  "email": "juan@starlink.com",
+  "password": "password123"
+}
+# Respuesta: { "token": "eyJhbG...", "user": {...}, "expiresIn": 3600 }
+
+# Ahora el cliente puede acceder al portal
+GET /api/client/profile
+Authorization: Bearer eyJhbG...
+# Respuesta: { "id": "client_123", "name": "Juan Pérez", ... }
+```
+
 #### `GET /api/auth/me`
 
 Obtener datos del usuario autenticado.
@@ -750,7 +869,8 @@ Request:
   "name": "Juan Pérez",
   "dni": "12345678",
   "phone": "+580000000000",
-  "address": "Dirección completa"
+  "address": "Dirección completa",
+  "email": "juan.perez@example.com"
 }
 ```
 
@@ -760,6 +880,7 @@ Validaciones:
 - `dni` obligatorio y único por organización
 - `phone` obligatorio (mínimo 7 caracteres) y único por organización
 - `address` obligatorio
+- `email` obligatorio, formato email válido
 
 Respuesta (`201`):
 
@@ -771,6 +892,7 @@ Respuesta (`201`):
   "dni": "12345678",
   "phone": "+580000000000",
   "address": "Dirección completa",
+  "email": "juan.perez@example.com",
   "createdAt": "2026-06-29T12:00:00.000Z",
   "updatedAt": "2026-06-29T12:00:00.000Z"
 }
@@ -1102,20 +1224,20 @@ Request:
   "kitId": "KIT-2026-001",
   "planId": "plan_001",
   "dueDay": 5,
-  "starlinkEmail": "cliente@starlink.com",
   "starlinkPassword": "password123"
 }
 ```
 
 Validaciones:
 
-- `clientId` debe existir
+- `clientId` debe existir y tener email asignado
 - `starlinkAccountId` obligatorio y único por organización
 - `kitId` obligatorio
 - `planId` obligatorio y debe existir
 - `dueDay` entre 1 y 31
-- `starlinkEmail` obligatorio, formato email válido
 - `starlinkPassword` obligatorio
+
+> **Nota:** El `starlinkEmail` se toma automáticamente del email del cliente. No se necesita especificar en el request.
 
 Respuesta (`201`):
 
@@ -1740,7 +1862,7 @@ Reglas:
   - fecha de corte
   - consecuencia de no pagar
 
-## 9. Permisos
+# 9. Permisos
 
 > **Cambio arquitectónico (2026-06-27):** Se eliminó el rol `operator` y se agregó el rol `client`.
 > Ahora existen dos entidades diferenciadas:
@@ -1750,12 +1872,18 @@ Reglas:
 > Un User con rol `client` tiene un campo `clientId` que lo vincula a un Client específico,
 > permitiéndole acceder solo a sus propios datos (suscripción, pagos, deuda).
 
+### Endpoints públicos (no requieren autenticación)
+
+Los siguientes endpoints están disponibles sin necesidad de token:
+
+- **`POST /api/auth/login`** — inicio de sesión para admin y client.
+
 ### `admin`
 
 Puede:
 
 - **Health:** `GET /api/health`
-- **Auth:** registrar usuarios (`POST /api/auth/register`), listar usuarios (`GET /api/auth/users`), activar/desactivar usuarios
+- **Auth:** registrar usuarios (`POST /api/auth/register`), registrar clientes (`POST /api/auth/register-client`), listar usuarios (`GET /api/auth/users`), activar/desactivar usuarios
 - **Clientes:** crear, listar, obtener, actualizar, eliminar
 - **Planes:** crear, listar, obtener, actualizar, propagar cambios
 - **Suscripciones:** crear, obtener detalle enriquecido, transferir, suspender manualmente

@@ -20,6 +20,7 @@ export const clientService = {
     dni: string;
     phone: string;
     address: string;
+    email: string;
   }) {
     const existing = await clientRepository.getByPhone(input.context.organizationId, input.phone);
 
@@ -38,7 +39,8 @@ export const clientService = {
       name: input.name,
       dni: input.dni,
       phone: input.phone,
-      address: input.address
+      address: input.address,
+      email: input.email
     });
 
     await activityLogService.log({

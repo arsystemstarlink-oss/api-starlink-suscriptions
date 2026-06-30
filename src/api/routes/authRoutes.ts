@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import { authService } from "../../services/auth/authService.js";
 import { requireAdmin, publicLoginContext } from "../middlewares/requestContext.js";
 import { validateBody } from "../validators/validateBody.js";
-import { loginSchema, registerSchema } from "../validators/schemas.js";
+import { loginSchema, registerSchema, registerClientSchema } from "../validators/schemas.js";
 import type { RequestContext } from "../../domain/models.js";
 
 type AsyncRoute = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
@@ -33,6 +33,24 @@ authPublicRouter.post(
       password: req.body.password
     });
     res.json(result);
+  })
+);
+
+authRouter.post(
+  "/register-client",
+  requireAdmin,
+  validateBody(registerClientSchema),
+  handler(async (req, res) => {
+    const result = await authService.registerClient({
+      context: ctx(req),
+      name: req.body.name,
+      dni: req.body.dni,
+      phone: req.body.phone,
+      address: req.body.address,
+      email: req.body.email,
+      password: req.body.password
+    });
+    res.status(201).json(result);
   })
 );
 

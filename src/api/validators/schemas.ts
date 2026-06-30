@@ -9,7 +9,8 @@ export const createClientSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
   dni: z.string().min(1, "El DNI es obligatorio"),
   phone: z.string().min(7, "El teléfono es obligatorio"),
-  address: z.string().min(1, "La dirección es obligatoria")
+  address: z.string().min(1, "La dirección es obligatoria"),
+  email: z.string().email("Email inválido")
 });
 
 export const updateClientSchema = z.object({
@@ -27,7 +28,6 @@ export const createSubscriptionSchema = z.object({
   kitId: z.string().min(1),
   planId: z.string().min(1),
   dueDay: z.coerce.number().int().min(1).max(31),
-  starlinkEmail: z.string().email("Email inválido"),
   starlinkPassword: z.string().min(1, "Password obligatorio")
 });
 
@@ -133,4 +133,18 @@ export const registerSchema = z.object({
     path: ["clientId"]
   }
 );
+
+/**
+ * Esquema para registro de cliente completo con credenciales de acceso.
+ * Unifica la creación del Client (entidad de negocio) y el User (entidad de autenticación).
+ * El cliente podrá inmediatamente hacer login con email y password.
+ */
+export const registerClientSchema = z.object({
+  name: z.string().min(1, "El nombre es obligatorio"),
+  dni: z.string().min(1, "El DNI es obligatorio"),
+  phone: z.string().min(7, "El teléfono es obligatorio"),
+  address: z.string().min(1, "La dirección es obligatoria"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "El password debe tener al menos 6 caracteres")
+});
 

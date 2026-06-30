@@ -53,7 +53,6 @@ subscriptionRouter.post(
       kitId: req.body.kitId,
       planId: req.body.planId,
       dueDay: req.body.dueDay,
-      starlinkEmail: req.body.starlinkEmail,
       starlinkPassword: req.body.starlinkPassword
     });
 

@@ -17,7 +17,6 @@ export const subscriptionService = {
     kitId: string;
     planId: string;
     dueDay: number;
-    starlinkEmail: string;
     starlinkPassword: string;
   }) {
     const existing = await subscriptionRepository.getByStarlinkAccountId(input.context.organizationId, input.starlinkAccountId);
@@ -51,7 +50,7 @@ export const subscriptionService = {
       lateFeeUsd: plan.lateFeeUsd,
       currentOwnerName: client.name,
       currentOwnerDni: client.dni ?? "",
-      starlinkEmail: input.starlinkEmail,
+      starlinkEmail: client.email,
       starlinkPassword: input.starlinkPassword
     });
 

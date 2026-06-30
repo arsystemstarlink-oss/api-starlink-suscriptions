@@ -23,6 +23,7 @@ export interface Client {
   dni: string;
   phone: string;
   address: string;
+  email: string;
   createdAt: string;
   updatedAt: string;
 }
