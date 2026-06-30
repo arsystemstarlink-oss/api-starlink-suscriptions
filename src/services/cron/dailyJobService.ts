@@ -56,7 +56,7 @@ export const dailyJobService = {
           await processSubscription(context, subscription, today, result);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Error desconocido";
-          result.errors.push(`${subscription.code}: ${message}`);
+          result.errors.push(`${subscription.starlinkAccountId}: ${message}`);
         }
       }
 
@@ -222,7 +222,7 @@ async function tryNotifyOnDueDate(
       to: client.phone,
       templateVariables: {
         "1": client.name,
-        "2": subscription.code,
+        "2": subscription.starlinkAccountId,
         "3": today
       },
       body: buildDueDateMessage(client, subscription, period, balance),
@@ -266,7 +266,7 @@ async function tryMarkOverdue(
       to: client.phone,
       templateVariables: {
         "1": client.name,
-        "2": subscription.code,
+        "2": subscription.starlinkAccountId,
         "3": today
       },
       body: buildOverdueMessage(client, subscription, period),
@@ -332,7 +332,7 @@ async function trySuspend(
       to: client.phone,
       templateVariables: {
         "1": client.name,
-        "2": subscription.code
+        "2": subscription.starlinkAccountId
       },
       body: buildSuspendedMessage(client, subscription, period, lateFee),
       payload: {
@@ -351,7 +351,7 @@ async function trySuspend(
 
 function buildReminderMessage(client: Client, subscription: Subscription, period: BillingPeriod, balance: number): string {
   return (
-    `Hola ${client.name}, tu suscripción ${subscription.code} tiene un saldo pendiente de ` +
+    `Hola ${client.name}, tu suscripción ${subscription.starlinkAccountId} tiene un saldo pendiente de ` +
     `${balance.toFixed(2)} USD con fecha de vencimiento ${period.dueDate}. ` +
     `Si no pagas a tiempo, el servicio podría suspenderse después de ${subscription.graceDays} días.`
   );
@@ -359,7 +359,7 @@ function buildReminderMessage(client: Client, subscription: Subscription, period
 
 function buildDueDateMessage(client: Client, subscription: Subscription, period: BillingPeriod, balance: number): string {
   return (
-    `${client.name}, hoy ${period.dueDate} vence tu suscripción ${subscription.code}. ` +
+    `${client.name}, hoy ${period.dueDate} vence tu suscripción ${subscription.starlinkAccountId}. ` +
     `Saldo pendiente: ${balance.toFixed(2)} USD. ` +
     `De no pagar, el servicio se suspenderá en ${subscription.graceDays} días.`
   );
@@ -367,7 +367,7 @@ function buildDueDateMessage(client: Client, subscription: Subscription, period:
 
 function buildOverdueMessage(client: Client, subscription: Subscription, period: BillingPeriod): string {
   return (
-    `${client.name}, tu suscripción ${subscription.code} está vencida desde ${period.dueDate}. ` +
+    `${client.name}, tu suscripción ${subscription.starlinkAccountId} está vencida desde ${period.dueDate}. ` +
     `Debes ${period.amountUsd.toFixed(2)} USD. Tienes ${subscription.graceDays} días antes de la suspensión.`
   );
 }
@@ -380,7 +380,7 @@ function buildSuspendedMessage(
 ): string {
   const total = period.amountUsd - period.paidAmountUsd + lateFee.amountUsd;
   return (
-    `${client.name}, tu suscripción ${subscription.code} ha sido suspendida. ` +
+    `${client.name}, tu suscripción ${subscription.starlinkAccountId} ha sido suspendida. ` +
     `Total pendiente: ${total.toFixed(2)} USD (incluye mora de ${lateFee.amountUsd.toFixed(2)} USD). ` +
     `Para reactivar debes pagar el total adeudado más un recargo.`
   );

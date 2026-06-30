@@ -90,14 +90,37 @@ Reglas:
 - `phone` obligatorio y único por organización.
 - `address` obligatorio.
 
+### Plan
+
+Campos principales:
+
+- `id`
+- `organizationId`
+- `name` — único por organización
+- `priceUsd`
+- `lateFeeUsd`
+- `graceDays`
+- `description?`
+- `isActive`
+- `createdAt`
+- `updatedAt`
+
+Reglas:
+
+- `name` obligatorio y único por organización.
+- `priceUsd > 0`.
+- `lateFeeUsd >= 0` (default `10`).
+- `graceDays >= 0` (default `30`).
+- `isActive` default `true`.
+
 ### Subscription
 
 Campos principales:
 
 - `id`
 - `organizationId`
-- `code`
-- `clientId`
+- `starlinkAccountId` — identificador único de la cuenta Starlink (único por organización)
+- `kitId`
 - `plan`
 - `priceUsd`
 - `status`
@@ -106,6 +129,8 @@ Campos principales:
 - `lateFeeUsd`
 - `currentOwnerName`
 - `currentOwnerDni`
+- `starlinkEmail` — email de la cuenta Starlink (obligatorio, para gestión centralizada de antenas)
+- `starlinkPassword` — password de la cuenta Starlink (obligatorio)
 - `createdAt`
 - `updatedAt`
 
@@ -118,9 +143,11 @@ Estados:
 
 Reglas:
 
-- `code` único por organización.
+- `starlinkAccountId` único por organización (identificador de la cuenta Starlink).
+- `kitId` identifica el equipo/antena física.
+- `starlinkEmail` y `starlinkPassword` son obligatorios y almacenan las credenciales de acceso a la cuenta Starlink para centralizar la gestión de las antenas. No se puede crear una suscripción sin credenciales.
 - Una suscripción puede tener múltiples períodos, pero solo uno activo de servicio.
-- Puede transferirse sin cambiar `code`.
+- Puede transferirse sin cambiar `starlinkAccountId`.
 - Al crearla queda `paused` hasta confirmar el primer pago.
 - La transferencia actualiza `clientId`, `currentOwnerName` y `currentOwnerDni` sin perder historial.
 
@@ -431,7 +458,7 @@ Resultado:
 
 Reglas:
 
-- El `code` no cambia.
+- El `starlinkAccountId` no cambia.
 - Se actualiza:
   - `clientId`
   - `currentOwnerName`
@@ -441,11 +468,280 @@ Reglas:
 
 ## 6. API principal
 
-### Clientes
+> **Convenciones generales (aplican a todos los endpoints):**
+>
+> - Base URL: `/api`
+> - Autenticación: header `Authorization: Bearer <JWT>` en todos los endpoints excepto `POST /api/auth/login` y `POST /api/communications/webhook/twilio`.
+> - Roles: `admin` requiere middleware `requireAdmin`. Sin middleware = cualquier rol autenticado.
+> - Paginación: query params `page` (default `1`) y `limit` (default `20`, max `100`).
+> - Respuestas de error: `{ "message": "descripción del error" }` con HTTP status correspondiente.
+> - Timestamps en formato ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`).
 
-#### `POST /clients`
+#### Resumen de endpoints
+
+| Método | Path | Auth | Sección |
+|--------|------|------|---------|
+| GET | `/api/health` | — | 6.1 |
+| POST | `/api/auth/login` | — | 6.2 |
+| POST | `/api/auth/register` | admin | 6.2 |
+| GET | `/api/auth/me` | auth | 6.2 |
+| GET | `/api/auth/users` | admin | 6.2 |
+| PUT | `/api/auth/users/:id/activate` | admin | 6.2 |
+| PUT | `/api/auth/users/:id/deactivate` | admin | 6.2 |
+| GET | `/api/clients` | admin | 6.3 |
+| POST | `/api/clients` | admin | 6.3 |
+| GET | `/api/clients/:id` | auth | 6.3 |
+| PUT | `/api/clients/:id` | admin | 6.3 |
+| DELETE | `/api/clients/:id` | admin | 6.3 |
+| GET | `/api/plans` | auth | 6.4 |
+| GET | `/api/plans/:id` | auth | 6.4 |
+| POST | `/api/plans` | admin | 6.4 |
+| PUT | `/api/plans/:id` | admin | 6.4 |
+| POST | `/api/plans/:id/propagate` | admin | 6.4 |
+| GET | `/api/subscriptions/:id` | auth | 6.5 |
+| POST | `/api/subscriptions` | admin | 6.5 |
+| POST | `/api/subscriptions/:id/transfer` | admin | 6.5 |
+| POST | `/api/subscriptions/:id/suspend` | admin | 6.5 |
+| POST | `/api/subscriptions/:id/payments` | admin | 6.5 |
+| GET | `/api/subscriptions/:id/debt` | admin | 6.5 |
+| GET | `/api/subscriptions/:id/reactivation-quote` | admin | 6.5 |
+| POST | `/api/subscriptions/:id/reactivate` | admin | 6.5 |
+| POST | `/api/payments/:id/confirm` | admin | 6.6 |
+| POST | `/api/payments/:id/void` | admin | 6.6 |
+| POST | `/api/communications/webhook/twilio` | Twilio sig | 6.7 |
+| GET | `/api/communications/:id` | admin | 6.7 |
+| GET | `/api/communications/client/:clientId` | admin | 6.7 |
+| POST | `/api/communications/send` | admin | 6.7 |
+| GET | `/api/cron/config` | — | 6.8 |
+| PUT | `/api/cron/config` | admin | 6.8 |
+| POST | `/api/cron/daily` | admin | 6.8 |
+| GET | `/api/client/profile` | client | 6.9 |
+| GET | `/api/client/subscription` | client | 6.9 |
+| GET | `/api/client/payments` | client | 6.9 |
+| GET | `/api/client/debt` | client | 6.9 |
+| WS | `/ws?token=<JWT>` | auth JWT | 6.10 |
+
+### 6.1 Health
+
+#### `GET /api/health`
+
+Verificar estado del servidor.
+
+**Auth:** ninguna
+
+Respuesta (`200`):
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-06-29T12:00:00.000Z"
+}
+```
+
+### 6.2 Autenticación `/api/auth`
+
+#### `POST /api/auth/login`
+
+Iniciar sesión y obtener JWT.
+
+**Auth:** ninguna
+
+Request:
+
+```json
+{
+  "email": "admin@ejemplo.com",
+  "password": "password123"
+}
+```
+
+Validaciones:
+
+- `email` formato email válido
+- `password` mínimo 6 caracteres
+
+Respuesta (`200`):
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "user_123",
+    "email": "admin@ejemplo.com",
+    "name": "Administrador",
+    "role": "admin"
+  }
+}
+```
+
+Errores:
+
+- `400` — datos inválidos
+- `403` — usuario desactivado
+- `403` — credenciales incorrectas
+
+#### `POST /api/auth/register`
+
+Registrar nuevo usuario.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "email": "cliente@ejemplo.com",
+  "password": "password123",
+  "name": "Juan Pérez",
+  "role": "client",
+  "clientId": "client_123"
+}
+```
+
+Validaciones:
+
+- `email` formato email válido
+- `password` mínimo 6 caracteres
+- `name` obligatorio
+- `role` — `"admin"` | `"client"` (default `"client"`)
+- `clientId` obligatorio si `role` es `"client"`
+- `email` único por organización
+
+Respuesta (`201`):
+
+```json
+{
+  "id": "user_456",
+  "email": "cliente@ejemplo.com",
+  "name": "Juan Pérez",
+  "role": "client",
+  "clientId": "client_123",
+  "isActive": true
+}
+```
+
+Errores:
+
+- `409` — email ya registrado
+
+#### `GET /api/auth/me`
+
+Obtener datos del usuario autenticado.
+
+**Auth:** cualquier rol
+
+Respuesta (`200`):
+
+```json
+{
+  "id": "user_123",
+  "email": "admin@ejemplo.com",
+  "name": "Administrador",
+  "role": "admin",
+  "isActive": true
+}
+```
+
+#### `GET /api/auth/users`
+
+Listar todos los usuarios de la organización (excluye `passwordHash`).
+
+**Auth:** `admin`
+
+Respuesta (`200`):
+
+```json
+[
+  {
+    "id": "user_123",
+    "email": "admin@ejemplo.com",
+    "name": "Administrador",
+    "role": "admin",
+    "isActive": true,
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "user_456",
+    "email": "cliente@ejemplo.com",
+    "name": "Juan Pérez",
+    "role": "client",
+    "clientId": "client_123",
+    "isActive": true,
+    "createdAt": "2026-01-02T00:00:00.000Z",
+    "updatedAt": "2026-01-02T00:00:00.000Z"
+  }
+]
+```
+
+#### `PUT /api/auth/users/:userId/activate`
+
+Activar usuario desactivado.
+
+**Auth:** `admin`
+
+Respuesta (`200`):
+
+```json
+{
+  "message": "Usuario activado"
+}
+```
+
+#### `PUT /api/auth/users/:userId/deactivate`
+
+Desactivar usuario (no podrá iniciar sesión).
+
+**Auth:** `admin`
+
+Respuesta (`200`):
+
+```json
+{
+  "message": "Usuario desactivado"
+}
+```
+
+### 6.3 Clientes `/api/clients`
+
+#### `GET /api/clients`
+
+Listar clientes paginado.
+
+**Auth:** `admin`
+
+Query params:
+
+- `page` (default `1`)
+- `limit` (default `20`, max `100`)
+
+Respuesta (`200`):
+
+```json
+{
+  "data": [
+    {
+      "id": "client_123",
+      "name": "Juan Pérez",
+      "dni": "12345678",
+      "phone": "+580000000000",
+      "address": "Dirección completa",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 45,
+  "totalPages": 3
+}
+```
+
+#### `POST /api/clients`
 
 Crear cliente.
+
+**Auth:** `admin`
 
 Request:
 
@@ -460,73 +756,284 @@ Request:
 
 Validaciones:
 
-- `name` obligatorio.
-- `dni` obligatorio y único.
-- `phone` obligatorio y único.
-- `address` obligatorio.
+- `name` obligatorio
+- `dni` obligatorio y único por organización
+- `phone` obligatorio (mínimo 7 caracteres) y único por organización
+- `address` obligatorio
 
-#### `GET /clients/{clientId}`
+Respuesta (`201`):
 
-Obtener cliente con sus suscripciones resumidas.
+```json
+{
+  "id": "client_123",
+  "organizationId": "default",
+  "name": "Juan Pérez",
+  "dni": "12345678",
+  "phone": "+580000000000",
+  "address": "Dirección completa",
+  "createdAt": "2026-06-29T12:00:00.000Z",
+  "updatedAt": "2026-06-29T12:00:00.000Z"
+}
+```
 
-### Suscripciones
+Errores:
 
-#### `POST /subscriptions`
+- `409` — DNI o teléfono ya registrado
 
-Crear suscripción.
+#### `GET /api/clients/:clientId`
+
+Obtener cliente con resumen de suscripciones.
+
+**Auth:** cualquier rol autenticado
+
+Respuesta (`200`):
+
+```json
+{
+  "id": "client_123",
+  "name": "Juan Pérez",
+  "dni": "12345678",
+  "phone": "+580000000000",
+  "address": "Dirección completa",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "subscriptions": [
+    {
+      "id": "sub_123",
+      "starlinkAccountId": "ACC-01-0001",
+      "plan": "Starlink Residential",
+      "planId": "plan_001",
+      "status": "active",
+      "priceUsd": 120,
+      "dueDay": 5
+    }
+  ]
+}
+```
+
+#### `PUT /api/clients/:clientId`
+
+Actualizar cliente (campos parciales).
+
+**Auth:** `admin`
 
 Request:
 
 ```json
 {
-  "clientId": "client_123",
-  "code": "ACC-01-0001",
-  "plan": "Starlink Residential",
-  "priceUsd": 120,
-  "dueDay": 5,
-  "graceDays": 30,
-  "lateFeeUsd": 10
-}
-```
-
-Respuesta esperada:
-
-```json
-{
-  "subscriptionId": "sub_123",
-  "status": "paused",
-  "initialBillingPeriodId": "bp_123",
-  "dueDate": "2026-06-05"
+  "name": "Juan P. Actualizado",
+  "phone": "+580000000001",
+  "address": "Nueva dirección"
 }
 ```
 
 Validaciones:
 
-- `clientId` existe.
-- `code` único.
-- `priceUsd > 0`.
-- `dueDay` entre 1 y 31.
-- `graceDays >= 0`.
-- `lateFeeUsd >= 0`.
+- Al menos un campo obligatorio
+- `dni` y `phone` únicos si se modifican
 
-#### `GET /subscriptions/{subscriptionId}`
+Respuesta (`200`): objeto `Client` actualizado.
+
+#### `DELETE /api/clients/:clientId`
+
+Eliminar cliente.
+
+**Auth:** `admin`
+
+Respuesta: `204 No Content`
+
+### 6.4 Planes `/api/plans`
+
+#### `GET /api/plans`
+
+Listar planes activos paginado.
+
+**Auth:** cualquier rol autenticado
+
+Query params:
+
+- `page` (default `1`)
+- `limit` (default `20`)
+- `includeInactive=true` (opcional, incluye planes inactivos)
+
+Respuesta (`200`):
+
+```json
+{
+  "data": [
+    {
+      "id": "plan_001",
+      "name": "Starlink Residential",
+      "priceUsd": 120,
+      "lateFeeUsd": 10,
+      "graceDays": 30,
+      "description": "Plan estándar residencial",
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 3,
+  "totalPages": 1
+}
+```
+
+#### `GET /api/plans/:planId`
+
+Obtener plan por ID.
+
+**Auth:** cualquier rol autenticado
+
+Respuesta (`200`): objeto `Plan` completo.
+
+#### `POST /api/plans`
+
+Crear plan.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "name": "Starlink Residential",
+  "priceUsd": 120,
+  "lateFeeUsd": 10,
+  "graceDays": 30,
+  "description": "Plan estándar residencial"
+}
+```
+
+Validaciones:
+
+- `name` obligatorio y único por organización. Se normaliza automáticamente a **Title Case** (cada palabra con mayúscula inicial)
+- `priceUsd > 0`.
+- `lateFeeUsd >= 0` (default `10`).
+- `graceDays >= 0` (default `30`).
+- `description` opcional.
+
+Respuesta (`201`):
+
+```json
+{
+  "id": "plan_001",
+  "organizationId": "default",
+  "name": "Starlink Residential",
+  "priceUsd": 120,
+  "lateFeeUsd": 10,
+  "graceDays": 30,
+  "description": "Plan estándar residencial",
+  "isActive": true,
+  "createdAt": "2026-06-29T12:00:00.000Z",
+  "updatedAt": "2026-06-29T12:00:00.000Z"
+}
+```
+
+Errores:
+
+- `409` — nombre ya registrado
+
+**Nota sobre normalización**: El campo `name` se normaliza automáticamente a **Title Case**. Por ejemplo:
+- `"starlink residential"` → `"Starlink Residential"`
+- `"PREMIUM PLAN"` → `"Premium Plan"`
+- `"basic"` → `"Basic"`
+
+La normalización también se aplica al actualizar planes vía `PUT /api/plans/:planId`.
+
+#### `PUT /api/plans/:planId`
+
+Actualizar plan (campos parciales).
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "priceUsd": 150,
+  "lateFeeUsd": 15,
+  "isActive": true
+}
+```
+
+Validaciones:
+
+- Al menos un campo obligatorio
+
+Respuesta (`200`): objeto `Plan` actualizado.
+
+#### `POST /api/plans/:planId/propagate`
+
+Propagar cambios del plan a suscripciones activas.
+
+**Auth:** `admin`
+
+**Precaución:** actualiza `priceUsd`, `lateFeeUsd` y `graceDays` en todas las suscripciones asociadas al plan.
+
+Request:
+
+```json
+{
+  "preview": true
+}
+```
+
+Validaciones:
+
+- `preview` booleano (default `false`)
+
+Respuesta (`200`) con `preview: true`:
+
+```json
+{
+  "affectedSubscriptions": 15,
+  "preview": true,
+  "changes": {
+    "priceUsd": 150,
+    "lateFeeUsd": 15,
+    "graceDays": 30
+  }
+}
+```
+
+Respuesta (`200`) con `preview: false`:
+
+```json
+{
+  "affectedSubscriptions": 15,
+  "preview": false,
+  "applied": true
+}
+```
+
+### 6.5 Suscripciones `/api/subscriptions`
+
+#### `GET /api/subscriptions/:subscriptionId`
 
 Obtener suscripción con datos enriquecidos en una sola respuesta.
 
-> **Mejora implementada (2026-06-26):** El endpoint originalmente retornaba solo `{ subscription, periods }`,
-> requiriendo que el frontend hiciera 3-4 requests adicionales (cliente, deuda, período activo).
-> Ahora retorna toda la información necesaria en una sola respuesta para:
->
-> 1. **Reducir latencia** — evitar múltiples requests HTTP
-> 2. **Simplificar frontend** — no necesita calcular estados ni buscar período activo
-> 3. **Garantizar consistencia** — todos los datos provienen de una sola transacción lógica
-> 4. **Mejorar UX** — la pantalla de detalle carga instantáneamente
+**Auth:** cualquier rol autenticado
 
 Respuesta:
 
 ```json
 {
-  "subscription": { /* datos básicos */ },
+  "subscription": {
+    "id": "sub_123",
+    "starlinkAccountId": "ACC-01-0001",
+    "planName": "Starlink Residential",
+    "planId": "plan_001",
+    "clientId": "client_123",
+    "priceUsd": 120,
+    "status": "active",
+    "dueDay": 5,
+    "graceDays": 30,
+    "lateFeeUsd": 10,
+    "currentOwnerName": "Juan Pérez",
+    "currentOwnerDni": "12345678"
+  },
   "client": {
     "id": "client_123",
     "name": "Juan Pérez",
@@ -548,7 +1055,17 @@ Respuesta:
     "overduePeriods": 1,
     "hasLateFees": false
   },
-  "periods": [ /* historial completo */ ],
+  "periods": [
+    {
+      "id": "bp_123",
+      "type": "regular",
+      "startDate": "2026-05-05",
+      "dueDate": "2026-06-05",
+      "amountUsd": 120,
+      "paidAmountUsd": 50,
+      "status": "partial"
+    }
+  ],
   "calculated": {
     "status": "overdue",
     "daysUntilDue": -2,
@@ -558,19 +1075,68 @@ Respuesta:
 }
 ```
 
-Campos explicados:
+Campos:
 
-- **client**: datos del titular actual de la suscripción
-- **activePeriod**: período pendiente o parcial (si existe), incluye balance calculado
-- **debt**: resumen de deuda — total adeudado, cantidad de períodos vencidos, si tiene mora aplicada
-- **calculated.status**: estado interpretado (active, overdue, suspended, paused, cancelled)
-- **calculated.daysUntilDue**: días faltantes hasta el próximo vencimiento (negativo si ya venció)
-- **calculated.isOverdue**: true si el período activo pasó su fecha de vencimiento
-- **calculated.isSuspended**: true si la suscripción está suspendida
+- **subscription** — datos básicos de la suscripción
+- **client** — datos del titular actual
+- **activePeriod** — período pendiente o parcial (si existe), incluye `balanceUsd` calculado
+- **debt** — resumen de deuda: total adeudado, períodos vencidos, si tiene mora
+- **periods** — historial completo de períodos
+- **calculated.status** — estado interpretado: `active`, `overdue`, `suspended`, `paused`, `cancelled`
+- **calculated.daysUntilDue** — días hasta vencimiento (negativo = ya venció)
+- **calculated.isOverdue** — true si el período activo pasó su `dueDate`
+- **calculated.isSuspended** — true si la suscripción está suspendida
 
-#### `POST /subscriptions/{subscriptionId}/transfer`
+#### `POST /api/subscriptions`
 
-Solo admin.
+Crear suscripción.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "clientId": "client_123",
+  "starlinkAccountId": "ACC-01-0001",
+  "kitId": "KIT-2026-001",
+  "planId": "plan_001",
+  "dueDay": 5,
+  "starlinkEmail": "cliente@starlink.com",
+  "starlinkPassword": "password123"
+}
+```
+
+Validaciones:
+
+- `clientId` debe existir
+- `starlinkAccountId` obligatorio y único por organización
+- `kitId` obligatorio
+- `planId` obligatorio y debe existir
+- `dueDay` entre 1 y 31
+- `starlinkEmail` obligatorio, formato email válido
+- `starlinkPassword` obligatorio
+
+Respuesta (`201`):
+
+```json
+{
+  "subscriptionId": "sub_123",
+  "status": "paused",
+  "initialBillingPeriodId": "bp_123",
+  "dueDate": "2026-07-05"
+}
+```
+
+Errores:
+
+- `409` — código de suscripción ya registrado
+
+#### `POST /api/subscriptions/:subscriptionId/transfer`
+
+Transferir suscripción a otro cliente.
+
+**Auth:** `admin`
 
 Request:
 
@@ -585,18 +1151,46 @@ Request:
 
 Validaciones:
 
-- `newClientId` existe.
-- `currentOwnerName` obligatorio.
-- `currentOwnerDni` obligatorio.
-- No cambia `code`.
+- `newClientId` debe existir
+- `currentOwnerName` obligatorio
+- `currentOwnerDni` obligatorio
+- `reason` obligatorio
+- El `starlinkAccountId` de la suscripción no cambia
 
-### Pagos
+Respuesta (`200`): suscripción actualizada con nuevo `clientId`, `currentOwnerName` y `currentOwnerDni`.
 
-#### `POST /subscriptions/{subscriptionId}/payments`
+#### `POST /api/subscriptions/:subscriptionId/suspend`
+
+Suspensión manual.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "reason": "Mora impaga confirmada por administrador"
+}
+```
+
+Validaciones:
+
+- `reason` obligatorio
+
+Respuesta (`200`): suscripción en estado `suspended`.
+
+Efectos:
+
+- Cambia status a `suspended`
+- Aplica mora (`LateFee`) si no existe
+- Envía WhatsApp de suspensión
+- Registra `ActivityLog`
+
+#### `POST /api/subscriptions/:subscriptionId/payments`
 
 Registrar pago.
 
-Puede ser ejecutado por `operator` o `admin`.
+**Auth:** `admin`
 
 Request:
 
@@ -612,7 +1206,17 @@ Request:
 }
 ```
 
-Respuesta:
+Validaciones:
+
+- `billingPeriodId` obligatorio
+- `amount > 0`
+- `currency` — `"USD"` | `"USDT"` | `"Bs"` | `"Zinli"`
+- `exchangeRate > 0`
+- `reference` obligatorio
+- `proofImage` obligatorio (URL del comprobante)
+- `paidAt` opcional (ISO 8601), default ahora
+
+Respuesta (`201`):
 
 ```json
 {
@@ -621,63 +1225,19 @@ Respuesta:
 }
 ```
 
-Validaciones:
+El pago queda `registered` hasta que un admin lo confirme.
 
-- `amount > 0`.
-- `currency` válida.
-- `exchangeRate > 0`.
-- `reference` obligatorio.
-- No permitir pagos duplicados con misma referencia confirmada.
-- No permitir pagos a períodos pagados, salvo flujo de anulación.
+Errores:
 
-#### `POST /payments/{paymentId}/confirm`
+- `400` — período ya pagado o datos inválidos
 
-Solo admin.
+#### `GET /api/subscriptions/:subscriptionId/debt`
 
-Request:
+Consultar deuda completa de la suscripción.
 
-```json
-{
-  "confirmedAt": "2026-05-30T12:05:00Z"
-}
-```
+**Auth:** `admin`
 
-Efectos:
-
-- `Payment.status = confirmed`.
-- Recalcular `BillingPeriod.paidAmountUsd`.
-- Recalcular estado del período.
-- Si corresponde, crear siguiente período.
-- Si corresponde, reactivar suscripción.
-- Enviar WhatsApp de confirmación de pago.
-- Registrar `ActivityLog`.
-
-#### `POST /payments/{paymentId}/void`
-
-Solo admin.
-
-Request:
-
-```json
-{
-  "reason": "Pago registrado por error"
-}
-```
-
-Efectos:
-
-- `Payment.status = voided`.
-- Recalcular deuda.
-- Registrar `ActivityLog`.
-- No elimina el documento original.
-
-### Deuda y reactivación
-
-#### `GET /subscriptions/{subscriptionId}/debt`
-
-Consultar deuda completa.
-
-Respuesta:
+Respuesta (`200`):
 
 ```json
 {
@@ -704,11 +1264,13 @@ Respuesta:
 }
 ```
 
-#### `GET /subscriptions/{subscriptionId}/reactivation-quote`
+#### `GET /api/subscriptions/:subscriptionId/reactivation-quote`
 
-Consultar total necesario para reactivar.
+Consultar total necesario para reactivar una suscripción suspendida.
 
-Respuesta:
+**Auth:** `admin`
+
+Respuesta (`200`):
 
 ```json
 {
@@ -724,9 +1286,18 @@ Respuesta:
 }
 ```
 
-#### `POST /subscriptions/{subscriptionId}/reactivate`
+Campos:
 
-Solo admin.
+- **canReactivate** — true si la suscripción está suspendida y puede reactivarse
+- **requiredUsd** — monto total necesario (deuda + mora + prorrata + recargo 5%)
+- **breakdown** — desglose detallado del cálculo
+- **nextCutoffDate** — próxima fecha de corte si se reactiva
+
+#### `POST /api/subscriptions/:subscriptionId/reactivate`
+
+Reactivar suscripción suspendida.
+
+**Auth:** `admin`
 
 Request:
 
@@ -737,66 +1308,309 @@ Request:
 }
 ```
 
-Reglas:
+Validaciones:
 
-- Recalcular deuda internamente.
-- Validar que pagos confirmados cubran `expectedTotalUsd`.
-- Si no cubre, rechazar.
-- Si cubre:
-  - marcar período vencido como `paid`
-  - aplicar mora
-  - crear/validar período de adelanto
-  - registrar recargo 5%
-  - marcar suscripción como `active`
-  - crear siguiente período regular si corresponde
-  - enviar WhatsApp de confirmación
-  - registrar auditoría
+- `paymentIds` — al menos 1 ID de pago `confirmed`
+- `expectedTotalUsd` se recalcula internamente; si los pagos no cubren el total, se rechaza
 
-### Suspensión manual
+Respuesta (`200`): suscripción actualizada con `status: "active"`.
 
-#### `POST /subscriptions/{subscriptionId}/suspend`
+Efectos:
 
-Solo admin.
+- Marca período vencido como `paid`
+- Aplica mora (`LateFee`)
+- Crea/valida período de adelanto (`BillingPeriod type=advance`)
+- Registra recargo 5% (`surchargeUsd`)
+- Cambia status a `active`
+- Crea siguiente período regular
+- Envía WhatsApp de confirmación
+- Registra `ActivityLog`
+
+### 6.6 Pagos `/api/payments`
+
+#### `POST /api/payments/:paymentId/confirm`
+
+Confirmar pago registrado.
+
+**Auth:** `admin`
 
 Request:
 
 ```json
 {
-  "reason": "Mora impaga confirmada por administrador"
+  "confirmedAt": "2026-05-30T12:05:00Z"
 }
 ```
 
+Request body opcional. Si `confirmedAt` no se envía, se usa la fecha actual.
+
+Respuesta (`200`): pago actualizado con `status: "confirmed"`.
+
 Efectos:
 
-- Cambia a `suspended`.
-- Aplica mora si no existe.
-- Envía WhatsApp.
-- Registra auditoría.
+- `Payment.status = confirmed`
+- Recalcula `BillingPeriod.paidAmountUsd`
+- Si el período queda pagado: crea siguiente período regular
+- Si reactiva una suscripción suspendida: aplica prorrata y recargo
+- Envía WhatsApp de confirmación
+- Registra `ActivityLog`
 
-### Cron
+#### `POST /api/payments/:paymentId/void`
 
-#### `POST /cron/daily`
+Anular pago.
 
-Ejecuta job diario.
+**Auth:** `admin`
 
-Debe ser idempotente por:
+Request:
 
-- `organizationId`
-- fecha de ejecución
-- tipo de job
+```json
+{
+  "reason": "Pago registrado por error"
+}
+```
 
-Puede ejecutarse desde scheduler externo, pero la lógica pertenece al backend.
+Validaciones:
 
-### Portal del Cliente
+- `reason` obligatorio
 
-> **Sección agregada (2026-06-27):** Endpoints exclusivos para usuarios con rol `client`.
+Respuesta (`200`): pago actualizado con `status: "voided"`.
+
+Efectos:
+
+- `Payment.status = voided`
+- Recalcula deuda
+- No elimina el documento original
+- Registra motivo y `ActivityLog`
+
+### 6.7 Comunicaciones `/api/communications`
+
+#### `POST /api/communications/webhook/twilio`
+
+Webhook de Twilio para mensajes entrantes.
+
+**Auth:** validación de firma Twilio (middleware `validateTwilioWebhook`)
+
+Twilio envía `application/x-www-form-urlencoded`:
+
+- `From` — número del remitente (p.ej. `whatsapp:+580000000000`)
+- `Body` — texto del mensaje
+- `MessageSid` — ID único del mensaje en Twilio
+
+Respuesta (`200`):
+
+```json
+{
+  "communicationId": "comm_123",
+  "status": "received"
+}
+```
+
+Si el número no corresponde a un cliente registrado, retorna `200` con mensaje informativo pero no crea comunicación.
+
+#### `GET /api/communications/:communicationId`
+
+Obtener comunicación por ID.
+
+**Auth:** `admin`
+
+Respuesta (`200`):
+
+```json
+{
+  "id": "comm_123",
+  "organizationId": "default",
+  "clientId": "client_123",
+  "subscriptionId": "sub_123",
+  "type": "payment_reminder",
+  "channel": "whatsapp",
+  "provider": "twilio",
+  "status": "sent",
+  "sentAt": "2026-06-02T08:00:00.000Z",
+  "payload": {
+    "to": "whatsapp:+580000000000",
+    "from": "whatsapp:+1234567890",
+    "messageSid": "SM..."
+  },
+  "createdAt": "2026-06-02T07:59:00.000Z"
+}
+```
+
+Tipos de comunicación:
+
+- `payment_reminder` — recordatorio 3 días antes del vencimiento
+- `overdue` — notificación de vencimiento
+- `suspended` — notificación de suspensión
+- `payment_confirmed` — confirmación de pago
+- `manual` — mensaje manual enviado por admin
+- `received` — mensaje entrante del cliente
+
+Estados:
+
+- `queued` — en cola
+- `sent` — enviado exitosamente
+- `received` — mensaje recibido del cliente
+- `failed` — error al enviar
+
+#### `GET /api/communications/client/:clientId`
+
+Listar comunicaciones de un cliente.
+
+**Auth:** `admin`
+
+Query params:
+
+- `limit` (opcional, default sin límite)
+
+Respuesta (`200`): array de objetos `Communication` ordenados por `createdAt` descendente.
+
+#### `POST /api/communications/send`
+
+Enviar mensaje manual por WhatsApp.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "clientId": "client_123",
+  "subscriptionId": "sub_123",
+  "body": "Su pago ha sido recibido, gracias por su pago."
+}
+```
+
+Validaciones:
+
+- `clientId` obligatorio
+- `subscriptionId` opcional
+- `body` obligatorio, máximo 4096 caracteres
+
+Respuesta (`201`):
+
+```json
+{
+  "id": "comm_456",
+  "type": "manual",
+  "status": "sent",
+  "sentAt": "2026-06-29T12:00:00.000Z"
+}
+```
+
+### 6.8 Cron — Ejecutor de tareas `/api/cron`
+
+#### `GET /api/cron/config`
+
+Obtener estado actual del scheduler y su configuración.
+
+**Auth:** ninguna (endpoint público para monitoreo)
+
+Respuesta (`200`):
+
+```json
+{
+  "isRunning": true,
+  "config": {
+    "id": "daily",
+    "organizationId": "default",
+    "scheduledHour": 8,
+    "scheduledMinute": 0,
+    "isActive": true,
+    "lastRunAt": "2026-06-29T08:00:00.000Z",
+    "lastRunResult": "completed",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-06-29T08:00:00.000Z"
+  },
+  "scheduledTime": "08:00",
+  "timezone": "America/Caracas"
+}
+```
+
+Campos:
+
+- **isRunning** — true si el cron tiene una tarea programada activa
+- **config** — configuración completa del scheduler (siempre presente con valores por defecto si no hay configuración guardada)
+- **scheduledTime** — hora programada en formato `"HH:MM"` (24h)
+- **timezone** — zona horaria del servidor
+
+#### `PUT /api/cron/config`
+
+Actualizar configuración del scheduler.
+
+**Auth:** `admin`
+
+Request:
+
+```json
+{
+  "scheduledHour": 10,
+  "scheduledMinute": 30,
+  "isActive": true
+}
+```
+
+Validaciones:
+
+- Al menos un campo obligatorio
+- `scheduledHour` — entero entre 0 y 23
+- `scheduledMinute` — entero entre 0 y 59
+- `isActive` — booleano
+
+Si no existe configuración previa, se crea con valores por defecto (`08:00`, `isActive: false`).
+
+Respuesta (`200`): configuración completa actualizada (`CronScheduleConfig`).
+
+Efectos:
+
+- Si `isActive: true`: programa o re-programa el cron inmediatamente
+- Si `isActive: false`: detiene la tarea programada sin borrar la configuración
+- Si se cambia hora/minuto: detiene la tarea anterior y crea una nueva con el horario actualizado
+
+#### `POST /api/cron/daily`
+
+Ejecutar job diario manualmente.
+
+**Auth:** `admin`
+
+Debe ser idempotente por `organizationId`, fecha de ejecución y tipo de job.
+Si ya se ejecutó hoy y marcó `completed`, retorna el resultado previo sin re-ejecutar.
+
+Respuesta (`200`):
+
+```json
+{
+  "organizationId": "default",
+  "date": "2026-06-29",
+  "status": "completed",
+  "reminded": 3,
+  "notifiedOnDueDate": 1,
+  "markedOverdue": 2,
+  "suspended": 0,
+  "errors": [],
+  "timestamp": "2026-06-29T12:00:00.000Z"
+}
+```
+
+Campos:
+
+- **status** — `"completed"`, `"already_executed"` o `"failed"`
+- **reminded** — cantidad de recordatorios enviados (3 días antes del vencimiento)
+- **notifiedOnDueDate** — notificaciones enviadas el día de vencimiento
+- **markedOverdue** — períodos marcados como `overdue`
+- **suspended** — suscripciones suspendidas automáticamente
+- **errors** — array de errores parciales (si los hubo)
+
+### 6.9 Portal del Cliente `/api/client`
+
+> Endpoints exclusivos para usuarios con rol `client`.
 > El cliente solo accede a sus propios datos mediante `clientId` extraído del JWT.
 
 #### `GET /api/client/profile`
 
 Retorna el perfil del cliente autenticado.
 
-Respuesta:
+**Auth:** `client`
+
+Respuesta (`200`):
 
 ```json
 {
@@ -804,31 +1618,43 @@ Respuesta:
   "name": "Juan Pérez",
   "dni": "12345678",
   "phone": "+580000000000",
-  "address": "Dirección completa"
+  "address": "Dirección completa",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
 #### `GET /api/client/subscription`
 
-Retorna la suscripción del cliente con datos enriquecidos (mismo formato que `GET /subscriptions/{id}`).
+Retorna la suscripción del cliente con datos enriquecidos (mismo formato que `GET /api/subscriptions/:id`).
 Si el cliente no tiene suscripción, retorna `{ "subscription": null }`.
+
+**Auth:** `client`
 
 #### `GET /api/client/payments`
 
 Retorna el historial de pagos del cliente, ordenado por fecha descendente.
 
-Respuesta:
+**Auth:** `client`
+
+Respuesta (`200`):
 
 ```json
 {
   "payments": [
     {
       "id": "pay_123",
+      "billingPeriodId": "bp_123",
+      "subscriptionId": "sub_123",
       "amount": 120,
       "currency": "USD",
+      "exchangeRate": 1,
       "amountUsd": 120,
+      "reference": "REF-001",
+      "proofImage": "https://storage/proof.jpg",
+      "paidAt": "2026-05-30T12:00:00.000Z",
       "status": "confirmed",
-      "paidAt": "2026-05-30T12:00:00Z"
+      "confirmedAt": "2026-05-30T12:05:00.000Z"
     }
   ]
 }
@@ -838,7 +1664,9 @@ Respuesta:
 
 Retorna el resumen de deuda del cliente.
 
-Respuesta:
+**Auth:** `client`
+
+Respuesta (`200`):
 
 ```json
 {
@@ -849,6 +1677,21 @@ Respuesta:
   "totalDueUsd": 0
 }
 ```
+
+### 6.10 WebSocket
+
+#### `WS /ws?token=<JWT>`
+
+Conexión WebSocket para actualizaciones en tiempo real.
+
+**Auth:** token JWT como query param
+
+Eventos emitidos por el servidor:
+
+- `payment:confirmed` — cuando un pago es confirmado
+- `subscription:status` — cuando cambia el estado de una suscripción
+- `debt:updated` — cuando se actualiza la deuda de una suscripción
+- `communication:sent` — cuando se envía una comunicación
 
 ## 7. Job diario
 
@@ -911,17 +1754,16 @@ Reglas:
 
 Puede:
 
-- crear/editar clientes
-- crear suscripciones
-- transferir suscripciones
-- registrar pagos
-- confirmar pagos
-- anular pagos
-- suspender manualmente
-- reactivar
-- consultar deuda
-- ejecutar/reportar jobs
-- registrar usuarios (admin o client) con `POST /api/auth/register`
+- **Health:** `GET /api/health`
+- **Auth:** registrar usuarios (`POST /api/auth/register`), listar usuarios (`GET /api/auth/users`), activar/desactivar usuarios
+- **Clientes:** crear, listar, obtener, actualizar, eliminar
+- **Planes:** crear, listar, obtener, actualizar, propagar cambios
+- **Suscripciones:** crear, obtener detalle enriquecido, transferir, suspender manualmente
+- **Pagos:** registrar pagos, confirmar pagos, anular pagos
+- **Deuda y reactivación:** consultar deuda, cotización de reactivación, reactivar
+- **Comunicaciones:** enviar mensajes manuales, listar comunicaciones, ver detalle
+- **Cron:** ver estado, configurar scheduler, ejecutar job diario
+- **WebSocket:** conexión en tiempo real
 
 ### `client`
 
@@ -1045,13 +1887,15 @@ Resultado:
 - Se guarda monto original, tasa y USD calculado.
 - La tasa queda auditada.
 
-### Caso 7: operador registra, admin confirma
+### Caso 7: admin registra y confirma pago
+
+Escenario normal donde el admin registra un pago y luego lo confirma.
 
 Resultado:
 
-- Pago queda `registered` tras registro del operador.
-- No afecta deuda.
-- Tras confirmación del admin, afecta deuda y estados.
+- Pago queda `registered` tras registro del admin.
+- No afecta deuda hasta confirmación.
+- Tras confirmación del mismo admin, afecta deuda y estados.
 
 ### Caso 8: anulación de pago
 
@@ -1167,7 +2011,7 @@ Antes de considerar terminada la implementación, validar:
 7. Implementar servicio de suspensión y mora.
 8. Implementar servicio de prorrata y recargo 5%.
 9. Implementar API por comandos.
-10. Implementar permisos `admin` y `operator`.
+10. Implementar permisos `admin` y `client`.
 11. Implementar job diario idempotente.
 12. Implementar Twilio y plantilla de mensajes.
 13. Implementar ActivityLog.

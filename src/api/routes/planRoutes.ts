@@ -45,7 +45,6 @@ planRouter.post("/", requireAdmin, validateBody(createPlanSchema), handler(async
   const plan = await planService.create({
     context: ctx(req),
     name: req.body.name,
-    code: req.body.code,
     priceUsd: req.body.priceUsd,
     lateFeeUsd: req.body.lateFeeUsd,
     graceDays: req.body.graceDays,

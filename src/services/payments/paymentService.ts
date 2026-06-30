@@ -399,7 +399,7 @@ async function sendPaymentConfirmedNotification(
       to: client.phone,
       body: (
         `${client.name}, tu pago de ${payment.amountUsd.toFixed(2)} USD (ref: ${payment.reference}) ` +
-        `para la suscripción ${subscription.code} ha sido confirmado. ¡Gracias!`
+        `para la suscripción ${subscription.starlinkAccountId} ha sido confirmado. ¡Gracias!`
       ),
       payload: {
         paymentId: payment.id,

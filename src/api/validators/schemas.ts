@@ -23,11 +23,12 @@ export const updateClientSchema = z.object({
 
 export const createSubscriptionSchema = z.object({
   clientId: z.string().min(1),
-  code: z.string().min(1),
   starlinkAccountId: z.string().min(1),
   kitId: z.string().min(1),
   planId: z.string().min(1),
-  dueDay: z.coerce.number().int().min(1).max(31)
+  dueDay: z.coerce.number().int().min(1).max(31),
+  starlinkEmail: z.string().email("Email inválido"),
+  starlinkPassword: z.string().min(1, "Password obligatorio")
 });
 
 export const registerPaymentSchema = z.object({
@@ -66,10 +67,9 @@ export const transferSubscriptionSchema = z.object({
 
 export const createPlanSchema = z.object({
   name: z.string().min(1, "El nombre del plan es obligatorio"),
-  code: z.string().min(1, "El c\u00f3digo del plan es obligatorio").regex(/^[A-Z0-9_-]+$/, "El c\u00f3digo solo puede contener may\u00fasculas, n\u00fameros, _ y -"),
   priceUsd: z.coerce.number().min(0.01, "El precio debe ser mayor a 0"),
   lateFeeUsd: z.coerce.number().min(0, "La mora no puede ser negativa").default(10),
-  graceDays: z.coerce.number().int().min(0, "Los d\u00edas de gracia no pueden ser negativos").default(30),
+  graceDays: z.coerce.number().int().min(0, "Los días de gracia no pueden ser negativos").default(30),
   description: z.string().optional()
 });
 

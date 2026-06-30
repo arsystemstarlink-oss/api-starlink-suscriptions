@@ -13,15 +13,16 @@ export const subscriptionService = {
   async create(input: {
     context: RequestContext;
     clientId: string;
-    code: string;
     starlinkAccountId: string;
     kitId: string;
     planId: string;
     dueDay: number;
+    starlinkEmail: string;
+    starlinkPassword: string;
   }) {
-    const existing = await subscriptionRepository.getByCode(input.context.organizationId, input.code);
+    const existing = await subscriptionRepository.getByStarlinkAccountId(input.context.organizationId, input.starlinkAccountId);
     if (existing) {
-      throw new BusinessRuleError("Ya existe una suscripción con ese código");
+      throw new BusinessRuleError("Ya existe una suscripción con ese Starlink Account ID");
     }
 
     const plan = await planRepository.getById(input.context.organizationId, input.planId);
@@ -38,7 +39,6 @@ export const subscriptionService = {
 
     const subscription = await subscriptionRepository.create({
       organizationId: input.context.organizationId,
-      code: input.code,
       starlinkAccountId: input.starlinkAccountId,
       kitId: input.kitId,
       planId: plan.id,
@@ -50,7 +50,9 @@ export const subscriptionService = {
       graceDays: plan.graceDays,
       lateFeeUsd: plan.lateFeeUsd,
       currentOwnerName: client.name,
-      currentOwnerDni: client.dni ?? ""
+      currentOwnerDni: client.dni ?? "",
+      starlinkEmail: input.starlinkEmail,
+      starlinkPassword: input.starlinkPassword
     });
 
     let billingPeriod: BillingPeriod;
@@ -204,7 +206,7 @@ export const subscriptionService = {
         type: CommunicationType.Suspended,
         to: client.phone,
         body: (
-          `${client.name}, tu suscripción ${subscription.code} ha sido suspendida por el administrador. ` +
+          `${client.name}, tu suscripción ${subscription.starlinkAccountId} ha sido suspendida por el administrador. ` +
           `Saldo pendiente: ${(balance + subscription.lateFeeUsd).toFixed(2)} USD. ` +
           `Motivo: ${input.reason}`
         ),

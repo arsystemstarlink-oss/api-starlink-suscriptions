@@ -227,10 +227,11 @@ describe("Integration: client routes", () => {
     it("returns client with subscriptions", async () => {
       const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Target", phone: "+584142222", dni: "D-TARGET", address: "A" });
       await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "SUB-001", starlinkAccountId: "acc", kitId: "kit",
+        organizationId: "test-org", starlinkAccountId: "SUB-001", kitId: "kit",
         planId: "plan", planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: "Target", currentOwnerDni: "123"
+        currentOwnerName: "Target", currentOwnerDni: "123",
+        starlinkEmail: "test@example.com", starlinkPassword: "pass123"
       });
       const res = await request(app).get(`/api/clients/${client.id}`).set(authHeaders(adminToken));
       expect(res.status).toBe(200);
@@ -257,8 +258,8 @@ describe("Integration: plan routes", () => {
 
   describe("GET /api/plans", () => {
     it("returns paginated active plans", async () => {
-      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", code: "BASIC", priceUsd: 30, lateFeeUsd: 10, graceDays: 30, isActive: true });
-      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Legacy", code: "LEGACY", priceUsd: 20, lateFeeUsd: 5, graceDays: 15, isActive: false });
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", priceUsd: 30, lateFeeUsd: 10, graceDays: 30, isActive: true });
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Legacy", priceUsd: 20, lateFeeUsd: 5, graceDays: 15, isActive: false });
       const res = await request(app).get("/api/plans").set(authHeaders(adminToken));
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
@@ -266,8 +267,8 @@ describe("Integration: plan routes", () => {
     });
 
     it("includes inactive with includeInactive", async () => {
-      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Act", code: "ACT", priceUsd: 40, lateFeeUsd: 10, graceDays: 30, isActive: true });
-      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Inact", code: "INACT", priceUsd: 20, lateFeeUsd: 5, graceDays: 15, isActive: false });
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Act", priceUsd: 40, lateFeeUsd: 10, graceDays: 30, isActive: true });
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Inact", priceUsd: 20, lateFeeUsd: 5, graceDays: 15, isActive: false });
       const res = await request(app).get("/api/plans?includeInactive=true").set(authHeaders(adminToken));
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(2);
@@ -276,7 +277,7 @@ describe("Integration: plan routes", () => {
 
     it("paginates correctly", async () => {
       for (let i = 1; i <= 6; i++) {
-        await mockRepos.planRepository.create({ organizationId: "test-org", name: `P${i}`, code: `P${i}`, priceUsd: i * 10, lateFeeUsd: 10, graceDays: 30, isActive: true });
+        await mockRepos.planRepository.create({ organizationId: "test-org", name: `P${i}`, priceUsd: i * 10, lateFeeUsd: 10, graceDays: 30, isActive: true });
       }
       const res = await request(app).get("/api/plans?page=2&limit=3").set(authHeaders(adminToken));
       expect(res.status).toBe(200);
@@ -289,21 +290,42 @@ describe("Integration: plan routes", () => {
   describe("POST /api/plans", () => {
     it("creates a plan", async () => {
       const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
-        .send({ name: "Premium", code: "PREMIUM", priceUsd: 80, lateFeeUsd: 20, graceDays: 30 });
+        .send({ name: "Premium", priceUsd: 80, lateFeeUsd: 20, graceDays: 30 });
       expect(res.status).toBe(201);
-      expect(res.body.code).toBe("PREMIUM");
+      expect(res.body.name).toBe("Premium");
     });
 
-    it("returns 400 for invalid code format", async () => {
+    it("normalizes name to Title Case", async () => {
       const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
-        .send({ name: "X", code: "invalid-lower", priceUsd: 50 });
+        .send({ name: "starlink residential", priceUsd: 120, lateFeeUsd: 10, graceDays: 30 });
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe("Starlink Residential");
+    });
+
+    it("normalizes uppercase to Title Case", async () => {
+      const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
+        .send({ name: "PREMIUM PLAN", priceUsd: 150, lateFeeUsd: 15, graceDays: 30 });
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe("Premium Plan");
+    });
+
+    it("returns 400 for missing name", async () => {
+      const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
+        .send({ priceUsd: 50 });
       expect(res.status).toBe(400);
     });
 
-    it("returns 409 for duplicate code", async () => {
-      await mockRepos.planRepository.create({ organizationId: "test-org", name: "X", code: "DUP", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
+    it("returns 409 for duplicate name", async () => {
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Duplicate", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
       const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
-        .send({ name: "Y", code: "DUP", priceUsd: 60 });
+        .send({ name: "Duplicate", priceUsd: 60 });
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 409 for duplicate name ignoring case", async () => {
+      await mockRepos.planRepository.create({ organizationId: "test-org", name: "Existing", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
+      const res = await request(app).post("/api/plans").set(authHeaders(adminToken))
+        .send({ name: "existing", priceUsd: 60 });
       expect(res.status).toBe(409);
     });
   });
@@ -314,7 +336,7 @@ describe("Integration: subscription routes", () => {
 
   const seed = async () => {
     const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584140000001", dni: "V-123", address: "Addr" });
-    const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", code: "BASIC", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
+    const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
     return { client, plan };
   };
 
@@ -326,7 +348,7 @@ describe("Integration: subscription routes", () => {
     it("creates subscription with billing period", async () => {
       const { client, plan } = await seed();
       const res = await request(app).post("/api/subscriptions").set(authHeaders(adminToken))
-        .send({ clientId: client.id, code: "STAR-001", starlinkAccountId: "ACC", kitId: "KIT", planId: plan.id, dueDay: 15 });
+        .send({ clientId: client.id, starlinkAccountId: "STAR-001", kitId: "KIT", planId: plan.id, dueDay: 15, starlinkEmail: "test@starlink.com", starlinkPassword: "pass" });
       expect(res.status).toBe(201);
       expect(res.body.subscriptionId).toBeDefined();
       expect(res.body.status).toBe("paused");
@@ -336,19 +358,20 @@ describe("Integration: subscription routes", () => {
     it("returns 409 for duplicate code", async () => {
       const { client, plan } = await seed();
       await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "DUP", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "DUP", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "paused" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: "C", currentOwnerDni: "1"
+        currentOwnerName: "C", currentOwnerDni: "1",
+        starlinkEmail: "dup@starlink.com", starlinkPassword: "pass"
       });
       const res = await request(app).post("/api/subscriptions").set(authHeaders(adminToken))
-        .send({ clientId: client.id, code: "DUP", starlinkAccountId: "a2", kitId: "k2", planId: plan.id, dueDay: 15 });
+        .send({ clientId: client.id, starlinkAccountId: "DUP", kitId: "k2", planId: plan.id, dueDay: 15, starlinkEmail: "dup@starlink.com", starlinkPassword: "pass" });
       expect(res.status).toBe(409);
     });
 
     it("returns 403 without JWT", async () => {
       const res = await request(app).post("/api/subscriptions")
-        .send({ clientId: "x", code: "x", starlinkAccountId: "x", kitId: "x", planId: "x", dueDay: 15 });
+        .send({ clientId: "x", starlinkAccountId: "x", kitId: "x", planId: "x", dueDay: 15, starlinkEmail: "x@starlink.com", starlinkPassword: "pass" });
       expect(res.status).toBe(403);
     });
   });
@@ -357,10 +380,11 @@ describe("Integration: subscription routes", () => {
     it("suspends active subscription", async () => {
       const { client, plan } = await seed();
       const sub = await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "SUSP", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "SUSP", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: "C", currentOwnerDni: "1"
+        currentOwnerName: "C", currentOwnerDni: "1",
+        starlinkEmail: "susp@starlink.com", starlinkPassword: "pass"
       });
       await mockRepos.billingPeriodRepository.create({
         organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,
@@ -376,10 +400,11 @@ describe("Integration: subscription routes", () => {
     it("returns 409 if already suspended", async () => {
       const { client, plan } = await seed();
       const sub = await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "ALREADY", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "ALREADY", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "suspended" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: "C", currentOwnerDni: "1"
+        currentOwnerName: "C", currentOwnerDni: "1",
+        starlinkEmail: "already@starlink.com", starlinkPassword: "pass"
       });
       const res = await request(app).post(`/api/subscriptions/${sub.id}/suspend`)
         .set(authHeaders(adminToken)).send({ reason: "Test" });
@@ -391,10 +416,11 @@ describe("Integration: subscription routes", () => {
     it("returns enriched response with client, activePeriod, debt, calculated", async () => {
       const { client, plan } = await seed();
       const sub = await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "ENRICH-001", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "ENRICH-001", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: client.name, currentOwnerDni: client.dni
+        currentOwnerName: client.name, currentOwnerDni: client.dni,
+        starlinkEmail: "enrich1@starlink.com", starlinkPassword: "pass"
       });
       await mockRepos.billingPeriodRepository.create({
         organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,
@@ -405,7 +431,7 @@ describe("Integration: subscription routes", () => {
       const res = await request(app).get(`/api/subscriptions/${sub.id}`).set(authHeaders(adminToken));
       expect(res.status).toBe(200);
       expect(res.body.subscription).toBeDefined();
-      expect(res.body.subscription.code).toBe("ENRICH-001");
+      expect(res.body.subscription.starlinkAccountId).toBe("ENRICH-001");
       expect(res.body.client).toBeDefined();
       expect(res.body.client.name).toBe("Client");
       expect(res.body.client.dni).toBe("V-123");
@@ -426,10 +452,11 @@ describe("Integration: subscription routes", () => {
     it("detects overdue status correctly", async () => {
       const { client, plan } = await seed();
       const sub = await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "ENRICH-002", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "ENRICH-002", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "active" as any, dueDay: 5, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: client.name, currentOwnerDni: client.dni
+        currentOwnerName: client.name, currentOwnerDni: client.dni,
+        starlinkEmail: "enrich2@starlink.com", starlinkPassword: "pass"
       });
       await mockRepos.billingPeriodRepository.create({
         organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,
@@ -446,10 +473,11 @@ describe("Integration: subscription routes", () => {
     it("returns activePeriod as null when no pending periods", async () => {
       const { client, plan } = await seed();
       const sub = await mockRepos.subscriptionRepository.create({
-        organizationId: "test-org", code: "ENRICH-003", starlinkAccountId: "a", kitId: "k",
+        organizationId: "test-org", starlinkAccountId: "ENRICH-003", kitId: "k",
         planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
         status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-        currentOwnerName: client.name, currentOwnerDni: client.dni
+        currentOwnerName: client.name, currentOwnerDni: client.dni,
+        starlinkEmail: "enrich3@starlink.com", starlinkPassword: "pass"
       });
       await mockRepos.billingPeriodRepository.create({
         organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,
@@ -474,12 +502,13 @@ describe("Integration: payment routes", () => {
 
   const seed = async () => {
     const client = await mockRepos.clientRepository.create({ organizationId: "test-org", name: "Client", phone: "+584141", dni: "D-C", address: "A" });
-    const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", code: "PAY", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
+    const plan = await mockRepos.planRepository.create({ organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true });
     const sub = await mockRepos.subscriptionRepository.create({
-      organizationId: "test-org", code: "PAY-SUB", starlinkAccountId: "a", kitId: "k",
+      organizationId: "test-org", starlinkAccountId: "PAY-SUB", kitId: "k",
       planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
       status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-      currentOwnerName: "C", currentOwnerDni: "1"
+      currentOwnerName: "C", currentOwnerDni: "1",
+      starlinkEmail: "pay@starlink.com", starlinkPassword: "pass"
     });
     const period = await mockRepos.billingPeriodRepository.create({
       organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,
@@ -594,13 +623,14 @@ describe("Integration: client portal routes", () => {
       organizationId: "test-org", name: "Portal Client", phone: "+58414777", dni: "D-PORTAL", address: "Portal St"
     });
     const plan = await mockRepos.planRepository.create({
-      organizationId: "test-org", name: "Basic", code: "PORTAL", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true
+      organizationId: "test-org", name: "Basic", priceUsd: 50, lateFeeUsd: 10, graceDays: 30, isActive: true
     });
     const sub = await mockRepos.subscriptionRepository.create({
-      organizationId: "test-org", code: "PORTAL-SUB", starlinkAccountId: "a", kitId: "k",
+      organizationId: "test-org", starlinkAccountId: "PORTAL-SUB", kitId: "k",
       planId: plan.id, planName: "Basic", clientId: client.id, priceUsd: 50,
       status: "active" as any, dueDay: 15, graceDays: 30, lateFeeUsd: 10,
-      currentOwnerName: client.name, currentOwnerDni: client.dni
+      currentOwnerName: client.name, currentOwnerDni: client.dni,
+      starlinkEmail: "portal@starlink.com", starlinkPassword: "pass"
     });
     await mockRepos.billingPeriodRepository.create({
       organizationId: "test-org", subscriptionId: sub.id, clientId: client.id,

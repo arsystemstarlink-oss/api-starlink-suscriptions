@@ -149,11 +149,11 @@ export const planRepository = {
     return p?.organizationId === organizationId ? p : null;
   },
 
-  async getByCode(organizationId: string, code: string): Promise<Plan | null> {
+  async getByName(organizationId: string, name: string): Promise<Plan | null> {
     const matches = fieldWhere(
       [...store.plans.values()].filter((p) => p.organizationId === organizationId),
-      "code",
-      code
+      "name",
+      name
     );
     return matches[0] ?? null;
   },
@@ -193,11 +193,11 @@ export const subscriptionRepository = {
     return s?.organizationId === organizationId ? s : null;
   },
 
-  async getByCode(organizationId: string, code: string): Promise<Subscription | null> {
+  async getByStarlinkAccountId(organizationId: string, starlinkAccountId: string): Promise<Subscription | null> {
     const matches = fieldWhere(
       [...store.subscriptions.values()].filter((s) => s.organizationId === organizationId),
-      "code",
-      code
+      "starlinkAccountId",
+      starlinkAccountId
     );
     return matches[0] ?? null;
   },

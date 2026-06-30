@@ -131,9 +131,9 @@ export const planRepository = {
     return snapshot.exists ? toData<Plan>(snapshot) : null;
   },
 
-  async getByCode(organizationId: string, code: string): Promise<Plan | null> {
+  async getByName(organizationId: string, name: string): Promise<Plan | null> {
     const snapshot = await orgCol(organizationId, "plans")
-      .where("code", "==", code)
+      .where("name", "==", name)
       .limit(1)
       .get();
 
@@ -180,9 +180,9 @@ export const subscriptionRepository = {
     return snapshot.exists ? toData<Subscription>(snapshot) : null;
   },
 
-  async getByCode(organizationId: string, code: string): Promise<Subscription | null> {
+  async getByStarlinkAccountId(organizationId: string, starlinkAccountId: string): Promise<Subscription | null> {
     const snapshot = await orgCol(organizationId, "subscriptions")
-      .where("code", "==", code)
+      .where("starlinkAccountId", "==", starlinkAccountId)
       .limit(1)
       .get();
 

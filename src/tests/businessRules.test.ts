@@ -151,10 +151,10 @@ describe("Plan §10 - Casos de negocio", () => {
   });
 
   describe("Caso 9: Transferencia", () => {
-    it("código no cambia en transferencia", () => {
-      const originalCode = "ACC-01-0001";
-      const transferResult = { ...{ code: originalCode, clientId: "oldClient" }, clientId: "newClient" };
-      expect(transferResult.code).toBe("ACC-01-0001");
+    it("starlinkAccountId no cambia en transferencia", () => {
+      const originalStarlinkAccountId = "ACC-01-0001";
+      const transferResult = { ...{ starlinkAccountId: originalStarlinkAccountId, clientId: "oldClient" }, clientId: "newClient" };
+      expect(transferResult.starlinkAccountId).toBe("ACC-01-0001");
       expect(transferResult.clientId).toBe("newClient");
     });
   });

@@ -62,7 +62,7 @@ clientRouter.get(
 
     const summary = subscriptions.map((sub) => ({
       id: sub.id,
-      code: sub.code,
+      starlinkAccountId: sub.starlinkAccountId,
       plan: sub.planName,
       planId: sub.planId,
       status: sub.status,

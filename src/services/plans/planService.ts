@@ -5,25 +5,32 @@ import type { Plan, RequestContext, Subscription, PaginationParams, PaginatedRes
 import { SubscriptionStatus } from "../../domain/types.js";
 import { activityLogService } from "../audit/activityLogService.js";
 
+function normalizeToTitleCase(text: string): string {
+  return text
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export const planService = {
   async create(input: {
     context: RequestContext;
     name: string;
-    code: string;
     priceUsd: number;
     lateFeeUsd: number;
     graceDays: number;
     description?: string;
   }) {
-    const existing = await planRepository.getByCode(input.context.organizationId, input.code);
+    const normalized = normalizeToTitleCase(input.name);
+    const existing = await planRepository.getByName(input.context.organizationId, normalized);
     if (existing) {
-      throw new BusinessRuleError("Ya existe un plan con ese código");
+      throw new BusinessRuleError("Ya existe un plan con ese nombre");
     }
 
     const plan = await planRepository.create({
       organizationId: input.context.organizationId,
-      name: input.name,
-      code: input.code,
+      name: normalized,
       priceUsd: input.priceUsd,
       lateFeeUsd: input.lateFeeUsd,
       graceDays: input.graceDays,
@@ -68,7 +75,7 @@ export const planService = {
     const before = { ...plan };
 
     const updateData: Partial<Plan> = {};
-    if (input.name !== undefined) updateData.name = input.name;
+    if (input.name !== undefined) updateData.name = normalizeToTitleCase(input.name);
     if (input.priceUsd !== undefined) updateData.priceUsd = input.priceUsd;
     if (input.lateFeeUsd !== undefined) updateData.lateFeeUsd = input.lateFeeUsd;
     if (input.graceDays !== undefined) updateData.graceDays = input.graceDays;
@@ -108,7 +115,7 @@ export const planService = {
 
     const changes = candidates.map(s => ({
       subscriptionId: s.id,
-      code: s.code,
+      starlinkAccountId: s.starlinkAccountId,
       status: s.status,
       currentPriceUsd: s.priceUsd,
       currentLateFeeUsd: s.lateFeeUsd,

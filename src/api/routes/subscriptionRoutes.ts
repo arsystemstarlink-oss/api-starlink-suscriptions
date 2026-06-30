@@ -49,11 +49,12 @@ subscriptionRouter.post(
     const result = await subscriptionService.create({
       context: ctx(req),
       clientId: req.body.clientId,
-      code: req.body.code,
       starlinkAccountId: req.body.starlinkAccountId,
       kitId: req.body.kitId,
       planId: req.body.planId,
-      dueDay: req.body.dueDay
+      dueDay: req.body.dueDay,
+      starlinkEmail: req.body.starlinkEmail,
+      starlinkPassword: req.body.starlinkPassword
     });
 
     res.status(201).json({

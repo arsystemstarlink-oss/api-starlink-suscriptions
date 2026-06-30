@@ -337,7 +337,7 @@ async function sendReactivationNotification(
       type: CommunicationType.PaymentConfirmed,
       to: client.phone,
       body:
-        `${client.name}, tu suscripción ${subscription.code} ha sido reactivada. ` +
+        `${client.name}, tu suscripción ${subscription.starlinkAccountId} ha sido reactivada. ` +
         `Pago confirmado por ${payment.amountUsd.toFixed(2)} USD (ref: ${payment.reference}). ¡Gracias!`,
       payload: {
         paymentId: payment.id,

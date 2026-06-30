@@ -31,7 +31,6 @@ export interface Plan {
   id: string;
   organizationId: string;
   name: string;
-  code: string;
   priceUsd: number;
   lateFeeUsd: number;
   graceDays: number;
@@ -44,7 +43,6 @@ export interface Plan {
 export interface Subscription {
   id: string;
   organizationId: string;
-  code: string;
   starlinkAccountId: string;
   kitId: string;
   planId: string;
@@ -57,6 +55,8 @@ export interface Subscription {
   lateFeeUsd: number;
   currentOwnerName: string;
   currentOwnerDni: string;
+  starlinkEmail: string;
+  starlinkPassword: string;
   createdAt: string;
   updatedAt: string;
 }
