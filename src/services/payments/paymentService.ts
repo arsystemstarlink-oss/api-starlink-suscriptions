@@ -17,8 +17,7 @@ import {
 } from "../../domain/types.js";
 import type { BillingPeriod, Payment, RequestContext, Subscription } from "../../domain/models.js";
 import { calculateAdvanceCharge, roundMoney } from "../../domain/calculations.js";
-import { daysUntilNextCutoff } from "../../domain/dateUtils.js";
-import { billingService } from "../billing/billingService.js";
+import { daysUntilNextCutoff, toDateString } from "../../domain/dateUtils.js";
 import { activityLogService } from "../audit/activityLogService.js";
 import { notificationService } from "../notifications/notificationService.js";
 import { clientService } from "../clients/clientService.js";
@@ -290,8 +289,18 @@ export const paymentService = {
     let totalPureDebt = 0;
     let totalLateFees = 0;
 
+    const today = toDateString(new Date());
+
     for (const period of periods) {
       if (period.status === BillingPeriodStatus.Paid) {
+        continue;
+      }
+
+      if (
+        (period.status === BillingPeriodStatus.Pending ||
+         period.status === BillingPeriodStatus.Partial) &&
+        today <= period.dueDate
+      ) {
         continue;
       }
 
@@ -349,7 +358,10 @@ export const paymentService = {
   /**
    * Cuando un billingPeriod regular queda completo, se encarga de:
    * - Reactivar la suscripción si estaba Pausada.
-   * - Crear el siguiente período regular.
+   *
+   * El siguiente billing period regular NO se crea aquí.
+   * Es responsabilidad del cron diario (dailyJobService) crear el siguiente
+   * período cuando el período actual ha vencido (dueDate < hoy).
    */
   async handlePaidPeriod(
     organizationId: string,
@@ -359,18 +371,6 @@ export const paymentService = {
     if (subscription.status === SubscriptionStatus.Paused) {
       await subscriptionRepository.update(subscription.id, subscription.organizationId, {
         status: SubscriptionStatus.Active
-      });
-    }
-
-    if (period.type === BillingPeriodType.Regular && subscription.status !== SubscriptionStatus.Suspended) {
-      await billingService.createNextRegularPeriod({
-        context: {
-          organizationId,
-          userId: "payment-service",
-          role: UserRole.Admin
-        },
-        subscription,
-        previousDueDate: period.dueDate
       });
     }
   }

@@ -8,7 +8,7 @@ import { billingService } from "../billing/billingService.js";
 import { notificationService } from "../notifications/notificationService.js";
 import { activityLogService } from "../audit/activityLogService.js";
 import { clientService } from "../clients/clientService.js";
-import { CommunicationType, SubscriptionStatus, UserRole } from "../../domain/types.js";
+import { BillingPeriodStatus, CommunicationType, SubscriptionStatus, UserRole } from "../../domain/types.js";
 import type { BillingPeriod, RequestContext, Subscription, Client } from "../../domain/models.js";
 import { addDays, toDateString } from "../../domain/dateUtils.js";
 
@@ -115,6 +115,7 @@ async function processSubscription(
   );
 
   if (!activePeriod) {
+    await tryCreateNextPeriod(context, subscription, today);
     return;
   }
 
@@ -134,6 +135,51 @@ async function processSubscription(
   if (refreshedPeriod && refreshedPeriod.status === "overdue") {
     await trySuspend(context, subscription, refreshedPeriod, today, result);
   }
+
+  await tryCreateNextPeriod(context, subscription, today);
+}
+
+async function tryCreateNextPeriod(
+  context: RequestContext,
+  subscription: Subscription,
+  today: string
+) {
+  const periods = await billingPeriodRepository.getBySubscription(
+    context.organizationId,
+    subscription.id
+  );
+
+  const regularPeriods = periods
+    .filter((p) => p.type === "regular")
+    .sort((a, b) => (a.startDate > b.startDate ? 1 : -1));
+
+  if (regularPeriods.length === 0) {
+    return;
+  }
+
+  const latestRegular = regularPeriods[regularPeriods.length - 1];
+
+  if (latestRegular.status !== BillingPeriodStatus.Paid || latestRegular.dueDate >= today) {
+    return;
+  }
+
+  const hasFuturePeriod = regularPeriods.some(
+    (p) => p.startDate > latestRegular.dueDate && p.status !== BillingPeriodStatus.Paid
+  );
+
+  if (hasFuturePeriod) {
+    return;
+  }
+
+  await billingService.createNextRegularPeriod({
+    context: {
+      ...context,
+      userId: "cron-daily",
+      role: UserRole.Admin
+    },
+    subscription,
+    previousDueDate: latestRegular.dueDate
+  });
 }
 
 async function tryReminder(

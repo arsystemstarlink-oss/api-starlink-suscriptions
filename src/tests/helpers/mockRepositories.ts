@@ -272,7 +272,7 @@ export const billingPeriodRepository = {
   },
 
   getRef(organizationId: string, id: string) {
-    return { id, organizationId };
+    return { id, organizationId, __type: "billingPeriod" };
   },
 
   async listDueForDailyJob(organizationId: string, today: string): Promise<BillingPeriod[]> {
@@ -315,7 +315,7 @@ export const paymentRepository = {
   },
 
   getRef(organizationId: string, id: string) {
-    return { id, organizationId };
+    return { id, organizationId, __type: "payment" };
   },
 
   async listByBillingPeriod(organizationId: string, billingPeriodId: string): Promise<Payment[]> {

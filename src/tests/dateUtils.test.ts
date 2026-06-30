@@ -1,4 +1,4 @@
-import { daysUntilNextCutoff, daysBetweenInclusive, addDays, addMonthsPreservingDay, nextCutoffDate, toDateString, toLocalDate } from "../domain/dateUtils.js";
+import { daysUntilNextCutoff, daysBetweenInclusive, addDays, addMonthsPreservingDay, nextCutoffDate, previousCutoffDate, toDateString, toLocalDate } from "../domain/dateUtils.js";
 
 describe("dateUtils", () => {
   describe("toDateString", () => {
@@ -40,6 +40,28 @@ describe("dateUtils", () => {
     it("advances to next month when on the same due day", () => {
       const result = nextCutoffDate(toLocalDate("2026-05-05"), 5);
       expect(toDateString(result)).toBe("2026-06-05");
+    });
+  });
+
+  describe("previousCutoffDate", () => {
+    it("returns the same month cutoff when dueDay has not yet arrived", () => {
+      const result = previousCutoffDate(toLocalDate("2026-06-20"), 21);
+      expect(toDateString(result)).toBe("2026-05-21");
+    });
+
+    it("returns the current month cutoff when dueDay has already passed", () => {
+      const result = previousCutoffDate(toLocalDate("2026-06-25"), 21);
+      expect(toDateString(result)).toBe("2026-06-21");
+    });
+
+    it("returns previous month cutoff when today is exactly the due day", () => {
+      const result = previousCutoffDate(toLocalDate("2026-06-21"), 21);
+      expect(toDateString(result)).toBe("2026-06-21");
+    });
+
+    it("crosses year boundary correctly", () => {
+      const result = previousCutoffDate(toLocalDate("2026-01-10"), 21);
+      expect(toDateString(result)).toBe("2025-12-21");
     });
   });
 

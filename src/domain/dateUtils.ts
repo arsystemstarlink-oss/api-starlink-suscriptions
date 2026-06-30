@@ -54,6 +54,22 @@ export function nextCutoffDate(from: Date | string, dueDay: number): Date {
   return candidate;
 }
 
+export function previousCutoffDate(from: Date | string, dueDay: number): Date {
+  if (dueDay < 1 || dueDay > 31) {
+    throw new BusinessRuleError("El día de corte debe estar entre 1 y 31");
+  }
+
+  const current = toLocalDate(from);
+  const candidate = toLocalMidnight(new Date(current.getFullYear(), current.getMonth(), dueDay));
+  const currentMidnight = toLocalMidnight(current);
+
+  if (candidate > currentMidnight) {
+    return toLocalMidnight(new Date(current.getFullYear(), current.getMonth() - 1, dueDay));
+  }
+
+  return candidate;
+}
+
 export function daysBetweenInclusive(start: Date | string, end: Date | string): number {
   const startDate = toLocalDate(start);
   const endDate = toLocalDate(end);
@@ -68,7 +84,7 @@ export function daysUntilNextCutoff(paymentDate: Date | string, dueDay: number):
 }
 
 export function addDays(date: Date | string, days: number): Date {
-  const result = toLocalDate(date);
+  const result = new Date(toLocalDate(date));
   result.setDate(result.getDate() + days);
   return result;
 }

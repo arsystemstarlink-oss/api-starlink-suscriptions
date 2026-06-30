@@ -6,7 +6,7 @@ import { clientService } from "../clients/clientService.js";
 import { billingService } from "../billing/billingService.js";
 import { activityLogService } from "../audit/activityLogService.js";
 import { notificationService } from "../notifications/notificationService.js";
-import { nextCutoffDate, toDateString, daysUntilNextCutoff } from "../../domain/dateUtils.js";
+import { nextCutoffDate, previousCutoffDate, daysUntilNextCutoff, toDateString, addDays } from "../../domain/dateUtils.js";
 import { paymentService } from "../payments/paymentService.js";
 
 export const subscriptionService = {
@@ -33,8 +33,9 @@ export const subscriptionService = {
     }
 
     const client = await clientService.getById(input.context, input.clientId);
-    const startDate = new Date();
-    const dueDate = nextCutoffDate(startDate, input.dueDay);
+    const now = new Date();
+    const startDate = previousCutoffDate(now, input.dueDay);
+    const dueDate = addDays(nextCutoffDate(now, input.dueDay), -1);
 
     const subscription = await subscriptionRepository.create({
       organizationId: input.context.organizationId,

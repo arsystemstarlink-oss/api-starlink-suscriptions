@@ -11,7 +11,7 @@ import {
 } from "../../domain/types.js";
 import type { BillingPeriod, LateFee, Subscription } from "../../domain/models.js";
 import { BusinessRuleError } from "../../domain/errors.js";
-import { addMonthsPreservingDay, toDateString, toLocalDate } from "../../domain/dateUtils.js";
+import { addMonthsPreservingDay, addDays, toDateString, toLocalDate } from "../../domain/dateUtils.js";
 import { activityLogService } from "../audit/activityLogService.js";
 import type { RequestContext } from "../../domain/models.js";
 
@@ -41,8 +41,9 @@ export const billingService = {
     subscription: Subscription;
     previousDueDate: Date | string;
   }) {
-    const startDate = toLocalDate(input.previousDueDate);
-    const dueDate = addMonthsPreservingDay(startDate, 1);
+    const prevDue = toLocalDate(input.previousDueDate);
+    const startDate = addDays(prevDue, 1);
+    const dueDate = addMonthsPreservingDay(prevDue, 1);
 
     return billingPeriodRepository.create({
       organizationId: input.context.organizationId,

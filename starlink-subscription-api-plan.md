@@ -234,6 +234,17 @@ Reglas:
 - Los pagos no se editan ni eliminan.
 - Para anular, se cambia a `voided` con motivo y auditoría.
 
+### Reglas de generación de Billing Periods
+
+- Al crear una suscripción se genera un único Billing Period con:
+  - `startDate` = último día de corte anterior o igual a la fecha de registro.
+  - `dueDate` = día anterior al próximo día de corte.
+  - Ejemplo: registro el 30/06 con `dueDay = 21` → `startDate = 21/06`, `dueDate = 20/07`.
+- No se generan Billing Periods para meses anteriores al inicio del servicio.
+- Solo debe existir un Billing Period activo (Pending/Partial/Overdue) por suscripción.
+- El siguiente Billing Period regular se genera automáticamente por el cron diario **únicamente cuando el Billing Period actual ha vencido** (`dueDate < fecha actual`) y está `Paid`.
+- `calculateDebt` solo reporta como deuda los períodos cuyo `dueDate` ya pasó. Los períodos `Pending`/`Partial` aún vigentes no se consideran deuda.
+
 ### LateFee
 
 Campos principales:

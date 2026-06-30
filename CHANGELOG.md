@@ -4,6 +4,46 @@ Registro de mejoras y cambios realizados en la API para preparación de desplieg
 
 ## [Unreleased]
 
+### 2026-06-30 — Corrección crítica: Lógica de billing periods y debt calculation
+
+**Problema:** Al registrar o confirmar un pago en una suscripción recién creada, el sistema generaba inmediatamente un billing period adicional pendiente y lo reportaba como deuda, causando que la suscripción apareciera "pendiente" aun teniendo el pago vigente confirmado.
+
+**Causa raíz (4 problemas identificados):**
+
+1. **`subscriptionService.create()`**: `startDate` del billing period se fijaba a la fecha de registro (`new Date()`) en vez del día de corte anterior. Además `dueDate` apuntaba al día de corte en sí, no al día anterior a este.
+
+2. **`paymentService.handlePaidPeriod()`**: Tras confirmar un pago y dejar el billing period en `Paid`, se creaba automáticamente el siguiente billing period `Pending`. Esto generaba un período extra que `calculateDebt()` reportaba como deuda inmediatamente.
+
+3. **`paymentService.calculateDebt()`**: Consideraba como deuda cualquier billing period con status `Pending` o `Partial`, sin evaluar si su `dueDate` ya venció. Los períodos aún vigentes dentro de su ventana de pago no se consideraban deuda.
+
+4. **Bonus fix — `dateUtils.addDays()`**: Mutaba el objeto `Date` de entrada directamente. Esto causaba que cuando `billingService.createNextRegularPeriod()` llamaba `addDays(prevDue, 1)` seguido de `addMonthsPreservingDay(prevDue, 1)`, la segunda operación trabajaba sobre la fecha ya mutada, produciendo un `dueDate` incorrecto.
+
+**Cambios:**
+
+- `src/domain/dateUtils.ts`:
+  - Nueva función `previousCutoffDate()` que calcula el último día de corte ≤ una fecha dada.
+  - Fix en `addDays()`: ahora clona el `Date` antes de modificarlo para evitar mutación del input.
+- `src/services/subscriptions/subscriptionService.ts`: `create()` usa `previousCutoffDate()` para el `startDate` y `addDays(nextCutoffDate, -1)` para el `dueDate`.
+- `src/services/billing/billingService.ts`: `createNextRegularPeriod()` usa `addDays(prevDue, 1)` para el nuevo `startDate` (el día anterior ya no se usa).
+- `src/services/payments/paymentService.ts`:
+  - `handlePaidPeriod()`: ya no crea el siguiente billing period automáticamente.
+  - `calculateDebt()`: ahora omite períodos `Pending`/`Partial` cuyo `dueDate` aún no ha vencido.
+- `src/services/cron/dailyJobService.ts`: nueva función `tryCreateNextPeriod()` crea el siguiente billing period cuando el actual está `Paid` y su `dueDate` ha pasado.
+- `src/tests/helpers/mockRepositories.ts`: corrección en los mocks de `getRef` para incluir `__type`, necesario para que las transacciones simuladas funcionen correctamente.
+
+**Tests:** `src/tests/billingAudit.test.ts` — 11 nuevos casos de prueba que validan:
+- `previousCutoffDate()` con diferentes fechas.
+- Fechas correctas del billing period inicial tras crear una suscripción.
+- Confirmar el primer pago no genera billing period extra.
+- Suscripción queda `Active` tras confirmar primer pago.
+- `calculateDebt()` no reporta períodos vigentes como deuda.
+- Flujo completo: crear → pagar → confirmar → deuda = 0.
+- Fechas correctas del siguiente billing period generado por `createNextRegularPeriod()`.
+
+**Todos los tests:** 155 pasando en 8 suites.
+
+---
+
 ### 2026-06-30 — Remover `proofImage` del registro de pagos
 
 **Problema:** Firebase Storage requiere un plan de pago. Cargar imágenes de comprobantes ya no es viable.
