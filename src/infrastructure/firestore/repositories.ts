@@ -1,7 +1,8 @@
 import {
   FieldValue,
   type DocumentData,
-  type QueryDocumentSnapshot
+  type QueryDocumentSnapshot,
+  type Query as FirestoreQuery
 } from "firebase-admin/firestore";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import { getFirestore, sanitizeForFirestore } from "./firestore.js";
@@ -127,6 +128,20 @@ export const clientRepository = {
 
   async delete(id: string, organizationId: string): Promise<void> {
     await orgCol(organizationId, "clients").doc(id).delete();
+  },
+
+  async search(organizationId: string, query: string, limit = 10): Promise<Client[]> {
+    const snapshot = await orgCol(organizationId, "clients").get();
+    const q = query.toLowerCase();
+    return snapshot.docs
+      .map((doc) => toData<Client>(doc))
+      .filter((client) =>
+        client.name.toLowerCase().includes(q) ||
+        client.dni?.toLowerCase().includes(q) ||
+        client.phone.toLowerCase().includes(q) ||
+        client.email.toLowerCase().includes(q)
+      )
+      .slice(0, limit);
   }
 };
 
@@ -239,6 +254,50 @@ export const subscriptionRepository = {
     return snapshot.docs
       .map((item) => toData<Subscription>(item))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+
+  async list(
+    organizationId: string,
+    filters?: {
+      status?: string[];
+      search?: string;
+      planId?: string;
+    }
+  ): Promise<Subscription[]> {
+    let query: FirestoreQuery<DocumentData> = orgCol(organizationId, "subscriptions");
+
+    if (filters?.status && filters.status.length > 0) {
+      query = query.where("status", "in", filters.status);
+    }
+
+    if (filters?.planId) {
+      query = query.where("planId", "==", filters.planId);
+    }
+
+    const snapshot = await query.get();
+    let items = snapshot.docs.map((doc) => toData<Subscription>(doc));
+
+    if (filters?.search) {
+      const q = filters.search.toLowerCase();
+      items = items.filter((sub) =>
+        sub.currentOwnerName.toLowerCase().includes(q) ||
+        sub.starlinkAccountId.toLowerCase().includes(q) ||
+        sub.currentOwnerDni.toLowerCase().includes(q) ||
+        sub.kitId.toLowerCase().includes(q)
+      );
+    }
+
+    return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async countByStatus(organizationId: string): Promise<Record<string, number>> {
+    const snapshot = await orgCol(organizationId, "subscriptions").get();
+    const counts: Record<string, number> = { active: 0, suspended: 0, paused: 0, cancelled: 0 };
+    snapshot.docs.forEach((doc) => {
+      const data = toData<Subscription>(doc);
+      counts[data.status] = (counts[data.status] || 0) + 1;
+    });
+    return counts;
   }
 };
 
@@ -302,6 +361,32 @@ export const billingPeriodRepository = {
     const snapshot = await orgCol(organizationId, "billingPeriods")
       .where("dueDate", "<=", today)
       .where("status", "in", [BillingPeriodStatus.Pending, BillingPeriodStatus.Partial])
+      .get();
+
+    return snapshot.docs.map((item) => toData<BillingPeriod>(item));
+  },
+
+  async listUpcomingDueDates(
+    organizationId: string,
+    fromDate: string,
+    toDate: string
+  ): Promise<BillingPeriod[]> {
+    const snapshot = await orgCol(organizationId, "billingPeriods")
+      .where("dueDate", ">=", fromDate)
+      .where("dueDate", "<=", toDate)
+      .where("status", "in", [BillingPeriodStatus.Pending, BillingPeriodStatus.Partial])
+      .orderBy("dueDate", "asc")
+      .get();
+
+    return snapshot.docs.map((item) => toData<BillingPeriod>(item));
+  },
+
+  async listByStatus(
+    organizationId: string,
+    statuses: BillingPeriodStatus[]
+  ): Promise<BillingPeriod[]> {
+    const snapshot = await orgCol(organizationId, "billingPeriods")
+      .where("status", "in", statuses)
       .get();
 
     return snapshot.docs.map((item) => toData<BillingPeriod>(item));
@@ -389,6 +474,60 @@ export const paymentRepository = {
       .get();
 
     return snapshot.docs.map((item) => toData<Payment>(item));
+  },
+
+  async list(
+    organizationId: string,
+    filters?: {
+      status?: string[];
+      clientId?: string;
+      subscriptionId?: string;
+      currency?: string;
+      fromDate?: string;
+      toDate?: string;
+    }
+  ): Promise<Payment[]> {
+    let query: FirestoreQuery<DocumentData> = orgCol(organizationId, "payments");
+
+    if (filters?.status && filters.status.length > 0) {
+      query = query.where("status", "in", filters.status);
+    }
+
+    if (filters?.clientId) {
+      query = query.where("clientId", "==", filters.clientId);
+    }
+
+    if (filters?.subscriptionId) {
+      query = query.where("subscriptionId", "==", filters.subscriptionId);
+    }
+
+    if (filters?.currency) {
+      query = query.where("currency", "==", filters.currency);
+    }
+
+    if (filters?.fromDate) {
+      query = query.where("paidAt", ">=", filters.fromDate);
+    }
+
+    if (filters?.toDate) {
+      query = query.where("paidAt", "<=", filters.toDate + "T23:59:59.999Z");
+    }
+
+    const snapshot = await query.orderBy("createdAt", "desc").get();
+    return snapshot.docs.map((doc) => toData<Payment>(doc));
+  },
+
+  async listRecent(
+    organizationId: string,
+    status: string | null,
+    limit: number
+  ): Promise<Payment[]> {
+    let query: FirestoreQuery<DocumentData> = orgCol(organizationId, "payments");
+    if (status) {
+      query = query.where("status", "==", status);
+    }
+    const snapshot = await query.orderBy("createdAt", "desc").limit(limit).get();
+    return snapshot.docs.map((doc) => toData<Payment>(doc));
   }
 };
 
@@ -497,6 +636,34 @@ export const communicationRepository = {
     };
     await orgCol(communication.organizationId, "communications").doc(id).set(sanitizeForFirestore(data));
     return data;
+  },
+
+  async listAll(
+    organizationId: string,
+    filters?: {
+      clientId?: string;
+      subscriptionId?: string;
+      type?: string;
+      limit?: number;
+    }
+  ): Promise<Communication[]> {
+    let query: FirestoreQuery<DocumentData> = orgCol(organizationId, "communications");
+
+    if (filters?.clientId) {
+      query = query.where("clientId", "==", filters.clientId);
+    }
+
+    if (filters?.subscriptionId) {
+      query = query.where("subscriptionId", "==", filters.subscriptionId);
+    }
+
+    if (filters?.type) {
+      query = query.where("type", "==", filters.type);
+    }
+
+    const limitVal = filters?.limit ?? 100;
+    const snapshot = await query.orderBy("createdAt", "desc").limit(limitVal).get();
+    return snapshot.docs.map((doc) => toData<Communication>(doc));
   }
 };
 
@@ -506,6 +673,31 @@ export const activityLogRepository = {
     const data: ActivityLog = { ...log, id, createdAt: nowIso() };
     await orgCol(log.organizationId, "activityLogs").doc(id).set(sanitizeForFirestore(data));
     return data;
+  },
+
+  async listRecent(organizationId: string, limit = 20): Promise<ActivityLog[]> {
+    const snapshot = await orgCol(organizationId, "activityLogs")
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    return snapshot.docs.map((doc) => toData<ActivityLog>(doc));
+  },
+
+  async listByEntity(
+    organizationId: string,
+    entityType: string,
+    entityId: string,
+    limit = 50
+  ): Promise<ActivityLog[]> {
+    const snapshot = await orgCol(organizationId, "activityLogs")
+      .where("entityType", "==", entityType)
+      .where("entityId", "==", entityId)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    return snapshot.docs.map((doc) => toData<ActivityLog>(doc));
   }
 };
 

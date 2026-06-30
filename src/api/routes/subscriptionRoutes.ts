@@ -34,6 +34,28 @@ function p(req: Request, name: string): string {
 export const subscriptionRouter = Router({ mergeParams: true });
 
 subscriptionRouter.get(
+  "/",
+  handler(async (req, res) => {
+    const context = ctx(req);
+    const statusParam = req.query.status as string | undefined;
+    const statuses = statusParam ? statusParam.split(",").filter(Boolean) : undefined;
+    const search = req.query.search as string | undefined;
+    const planId = req.query.planId as string | undefined;
+    const page = req.query.page ? parseInt(req.query.page as string) : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+    const result = await subscriptionService.list(context, {
+      status: statuses,
+      search,
+      planId,
+      page,
+      limit
+    });
+    res.json(result);
+  })
+);
+
+subscriptionRouter.get(
   "/:subscriptionId",
   handler(async (req, res) => {
     const result = await subscriptionService.getWithPeriods(ctx(req), p(req, "subscriptionId"));
@@ -114,6 +136,14 @@ subscriptionRouter.post(
       paymentId: result.id,
       status: result.status
     });
+  })
+);
+
+subscriptionRouter.get(
+  "/:subscriptionId/payments",
+  handler(async (req, res) => {
+    const result = await paymentService.listBySubscription(ctx(req), p(req, "subscriptionId"));
+    res.json({ data: result });
   })
 );
 

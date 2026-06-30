@@ -108,6 +108,100 @@ export const subscriptionService = {
     return subscriptionRepository.listByClientId(context.organizationId, clientId);
   },
 
+  async list(
+    context: RequestContext,
+    filters?: {
+      status?: string[];
+      search?: string;
+      planId?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) {
+    const page = filters?.page ?? 1;
+    const limit = Math.min(filters?.limit ?? 20, 100);
+
+    const [allSubscriptions, statusCounts] = await Promise.all([
+      subscriptionRepository.list(context.organizationId, {
+        status: filters?.status,
+        search: filters?.search,
+        planId: filters?.planId
+      }),
+      subscriptionRepository.countByStatus(context.organizationId)
+    ]);
+
+    const enriched = await Promise.all(
+      allSubscriptions.map(async (sub) => {
+        const client = await clientRepository.getById(context.organizationId, sub.clientId);
+        const activePeriod = await billingPeriodRepository.getActiveRegular(context.organizationId, sub.id);
+
+        let calcStatus: "active" | "overdue" | "suspended" | "paused" | "cancelled" = "active";
+        const today = new Date();
+        const isOverdue = activePeriod
+          ? today > new Date(activePeriod.dueDate + "T23:59:59")
+          : false;
+
+        if (sub.status === SubscriptionStatus.Suspended) {
+          calcStatus = "suspended";
+        } else if (sub.status === SubscriptionStatus.Paused) {
+          calcStatus = "paused";
+        } else if (sub.status === SubscriptionStatus.Cancelled) {
+          calcStatus = "cancelled";
+        } else if (isOverdue && sub.status === SubscriptionStatus.Active) {
+          calcStatus = "overdue";
+        }
+
+        return {
+          id: sub.id,
+          starlinkAccountId: sub.starlinkAccountId,
+          planName: sub.planName,
+          planId: sub.planId,
+          status: sub.status,
+          calculatedStatus: calcStatus,
+          priceUsd: sub.priceUsd,
+          dueDay: sub.dueDay,
+          graceDays: sub.graceDays,
+          lateFeeUsd: sub.lateFeeUsd,
+          currentOwnerName: sub.currentOwnerName,
+          currentOwnerDni: sub.currentOwnerDni,
+          clientName: client?.name ?? "",
+          clientPhone: client?.phone ?? "",
+          activePeriod: activePeriod ? {
+            id: activePeriod.id,
+            dueDate: activePeriod.dueDate,
+            amountUsd: activePeriod.amountUsd,
+            paidAmountUsd: activePeriod.paidAmountUsd,
+            balanceUsd: Math.max(0, activePeriod.amountUsd - activePeriod.paidAmountUsd),
+            status: activePeriod.status
+          } : null,
+          createdAt: sub.createdAt,
+          updatedAt: sub.updatedAt
+        };
+      })
+    );
+
+    const total = enriched.length;
+    const totalPages = Math.ceil(total / limit);
+    const data = enriched.slice((page - 1) * limit, page * limit);
+
+    const overdueCount = enriched.filter((s) => s.calculatedStatus === "overdue").length;
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+      totalPages,
+      summary: {
+        total,
+        active: (statusCounts[SubscriptionStatus.Active] ?? 0) - overdueCount,
+        suspended: statusCounts[SubscriptionStatus.Suspended] ?? 0,
+        overdue: overdueCount,
+        paused: statusCounts[SubscriptionStatus.Paused] ?? 0
+      }
+    };
+  },
+
   async transfer(input: {
     context: RequestContext;
     subscriptionId: string;

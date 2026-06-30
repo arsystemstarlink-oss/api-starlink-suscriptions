@@ -4,8 +4,8 @@ import { env } from "../config/env.js";
 import { UserRole } from "../domain/types.js";
 import { userRepository } from "../infrastructure/firestore/repositories.js";
 
-const ADMIN_EMAIL = "admin@starlink.com";
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_EMAIL = "test@email.com";
+const ADMIN_PASSWORD = "test123";
 const ADMIN_NAME = "Administrador";
 
 async function seedAdmin(): Promise<void> {

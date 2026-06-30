@@ -6,6 +6,7 @@ import { cronRouter } from "./cronRoutes.js";
 import { planRouter } from "./planRoutes.js";
 import { communicationRouter as communicationsRouter } from "./communicationRoutes.js";
 import { clientPortalRouter } from "./clientPortalRoutes.js";
+import { dashboardRouter } from "./dashboardRoutes.js";
 
 const apiRouter = Router();
 
@@ -16,5 +17,6 @@ apiRouter.use("/payments", paymentRouter);
 apiRouter.use("/cron", cronRouter);
 apiRouter.use("/communications", communicationsRouter);
 apiRouter.use("/client", clientPortalRouter);
+apiRouter.use("/dashboard", dashboardRouter);
 
 export { apiRouter };

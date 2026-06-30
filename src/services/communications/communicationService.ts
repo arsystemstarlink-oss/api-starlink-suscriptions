@@ -19,6 +19,57 @@ export const communicationService = {
     return await communicationRepository.listByClient(context.organizationId, clientId, limit);
   },
 
+  async list(
+    context: RequestContext,
+    filters?: {
+      clientId?: string;
+      subscriptionId?: string;
+      type?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) {
+    const page = filters?.page ?? 1;
+    const limit = Math.min(filters?.limit ?? 50, 100);
+
+    const allComms = await communicationRepository.listAll(context.organizationId, {
+      clientId: filters?.clientId,
+      subscriptionId: filters?.subscriptionId,
+      type: filters?.type
+    });
+
+    const total = allComms.length;
+    const totalPages = Math.ceil(total / limit);
+    const data = allComms.slice((page - 1) * limit, page * limit);
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+      totalPages
+    };
+  },
+
+  async sendClientMessage(input: {
+    context: RequestContext;
+    clientId: string;
+    body: string;
+  }): Promise<Communication> {
+    const client = await clientRepository.getById(input.context.organizationId, input.clientId);
+    if (!client) {
+      throw new NotFoundError(`Cliente no encontrado (id: ${input.clientId})`);
+    }
+
+    return await notificationService.recordReceived({
+      context: input.context,
+      clientId: input.clientId,
+      from: client.phone,
+      body: input.body,
+      messageSid: `client-msg-${Date.now()}`
+    });
+  },
+
   async getClient(context: RequestContext, clientId: string): Promise<Client> {
     const client = await clientRepository.getById(context.organizationId, clientId);
     

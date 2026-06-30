@@ -103,6 +103,56 @@ export const paymentService = {
     return paymentRepository.listByClientId(context.organizationId, clientId, "desc");
   },
 
+  async list(
+    context: RequestContext,
+    filters?: {
+      status?: string[];
+      clientId?: string;
+      subscriptionId?: string;
+      currency?: string;
+      fromDate?: string;
+      toDate?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) {
+    const page = filters?.page ?? 1;
+    const limit = Math.min(filters?.limit ?? 20, 100);
+
+    const allPayments = await paymentRepository.list(context.organizationId, {
+      status: filters?.status,
+      clientId: filters?.clientId,
+      subscriptionId: filters?.subscriptionId,
+      currency: filters?.currency,
+      fromDate: filters?.fromDate,
+      toDate: filters?.toDate
+    });
+
+    const total = allPayments.length;
+    const totalPages = Math.ceil(total / limit);
+    const data = allPayments.slice((page - 1) * limit, page * limit);
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+      totalPages
+    };
+  },
+
+  async getById(context: RequestContext, paymentId: string): Promise<Payment> {
+    const payment = await paymentRepository.getById(context.organizationId, paymentId);
+    if (!payment) {
+      throw new NotFoundError(`Pago no encontrado (id: ${paymentId})`);
+    }
+    return payment;
+  },
+
+  async listBySubscription(context: RequestContext, subscriptionId: string): Promise<Payment[]> {
+    return paymentRepository.listBySubscription(context.organizationId, subscriptionId);
+  },
+
   async confirm(context: RequestContext, paymentId: string, confirmedAt?: string) {
     const payment = await paymentRepository.getById(context.organizationId, paymentId);
 

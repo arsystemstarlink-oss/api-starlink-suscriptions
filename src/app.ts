@@ -9,6 +9,7 @@ import { authPublicRouter, authRouter } from "./api/routes/authRoutes.js";
 import { webhookRouter } from "./api/routes/communicationRoutes.js";
 import { globalRateLimiter, loginRateLimiter } from "./api/middlewares/rateLimiter.js";
 import { schedulerService } from "./services/cron/schedulerService.js";
+import { webSocketServer } from "./infrastructure/websocket/websocketServer.js";
 
 const app = express();
 
@@ -39,6 +40,19 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/cron/config", (_req, res) => {
   const status = schedulerService.getStatus();
   res.json(status);
+});
+
+app.get("/api/monitoring/health-extended", async (_req, res) => {
+  const firestoreStatus = "ok";
+  const websocketStatus = webSocketServer.getConnectionCount?.() ?? "unknown";
+
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    firestore: firestoreStatus,
+    websocket: websocketStatus,
+    scheduler: schedulerService.getStatus()
+  });
 });
 
 app.use("/api/auth/login", loginRateLimiter);

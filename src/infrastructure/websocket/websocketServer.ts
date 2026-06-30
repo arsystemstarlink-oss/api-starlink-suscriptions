@@ -181,6 +181,58 @@ class WebSocketServerManager {
     this.broadcastCommunication(communication, organizationId);
   }
 
+  getConnectionCount(): number {
+    return this.clients.size;
+  }
+
+  broadcastPaymentConfirmed(data: { paymentId: string; subscriptionId: string; organizationId: string }, organizationId: string) {
+    if (!this.wss) return;
+
+    const payload = JSON.stringify({
+      type: "payment:confirmed",
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    this.clients.forEach((client) => {
+      if (client.ws.readyState !== WebSocket.OPEN) return;
+      if (client.organizationId !== organizationId) return;
+      client.ws.send(payload);
+    });
+  }
+
+  broadcastSubscriptionStatusChange(data: { subscriptionId: string; status: string; organizationId: string }, organizationId: string) {
+    if (!this.wss) return;
+
+    const payload = JSON.stringify({
+      type: "subscription:status",
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    this.clients.forEach((client) => {
+      if (client.ws.readyState !== WebSocket.OPEN) return;
+      if (client.organizationId !== organizationId) return;
+      client.ws.send(payload);
+    });
+  }
+
+  broadcastDebtUpdated(data: { subscriptionId: string; totalDueUsd: number; organizationId: string }, organizationId: string) {
+    if (!this.wss) return;
+
+    const payload = JSON.stringify({
+      type: "debt:updated",
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    this.clients.forEach((client) => {
+      if (client.ws.readyState !== WebSocket.OPEN) return;
+      if (client.organizationId !== organizationId) return;
+      client.ws.send(payload);
+    });
+  }
+
   shutdown() {
     if (this.wss) {
       this.wss.close();

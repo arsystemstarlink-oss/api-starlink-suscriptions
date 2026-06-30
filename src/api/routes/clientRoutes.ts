@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { clientService } from "../../services/clients/clientService.js";
-import { subscriptionRepository } from "../../infrastructure/firestore/repositories.js";
+import { clientRepository, subscriptionRepository } from "../../infrastructure/firestore/repositories.js";
 import { requireAdmin } from "../middlewares/requestContext.js";
 import { validateBody } from "../validators/validateBody.js";
 import { createClientSchema, updateClientSchema, paginationQuerySchema } from "../validators/schemas.js";
@@ -49,6 +49,23 @@ clientRouter.post(
       email: req.body.email
     });
     res.status(201).json(client);
+  })
+);
+
+clientRouter.get(
+  "/search",
+  handler(async (req, res) => {
+    const context = ctx(req);
+    const q = (req.query.q as string)?.trim() ?? "";
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 20) : 10;
+
+    if (!q) {
+      res.json({ data: [] });
+      return;
+    }
+
+    const results = await clientRepository.search(context.organizationId, q, limit);
+    res.json({ data: results });
   })
 );
 
