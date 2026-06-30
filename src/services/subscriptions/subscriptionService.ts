@@ -72,16 +72,20 @@ export const subscriptionService = {
       throw error;
     }
 
-    await activityLogService.log({
-      context: input.context,
-      action: "subscription.created",
-      entityType: "subscription",
-      entityId: subscription.id,
-      after: {
-        subscription: subscription as unknown as Record<string, unknown>,
-        billingPeriod: billingPeriod as unknown as Record<string, unknown>
-      }
-    });
+    try {
+      await activityLogService.log({
+        context: input.context,
+        action: "subscription.created",
+        entityType: "subscription",
+        entityId: subscription.id,
+        after: {
+          subscription: subscription as unknown as Record<string, unknown>,
+          billingPeriod: billingPeriod as unknown as Record<string, unknown>
+        }
+      });
+    } catch (error) {
+      console.error("Error logging subscription creation:", error);
+    }
 
     return {
       subscription,
