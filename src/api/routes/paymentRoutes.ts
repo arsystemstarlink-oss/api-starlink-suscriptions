@@ -30,7 +30,7 @@ paymentRouter.post(
   requireAdmin,
   validateBody(confirmPaymentSchema),
   handler(async (req, res) => {
-    const result = await paymentService.confirm(ctx(req), p(req, "paymentId"));
+    const result = await paymentService.confirm(ctx(req), p(req, "paymentId"), req.body.confirmedAt);
     res.json(result);
   })
 );

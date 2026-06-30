@@ -106,7 +106,7 @@ export const paymentService = {
     return paymentRepository.listByClientId(context.organizationId, clientId, "desc");
   },
 
-  async confirm(context: RequestContext, paymentId: string) {
+  async confirm(context: RequestContext, paymentId: string, confirmedAt?: string) {
     const payment = await paymentRepository.getById(context.organizationId, paymentId);
 
     if (!payment) {
@@ -134,7 +134,7 @@ export const paymentService = {
       throw new BusinessRuleError("No se permiten pagos sobre períodos regulares ya pagados");
     }
 
-    const confirmedAt = new Date().toISOString();
+    const timestamp = confirmedAt ?? new Date().toISOString();
     const nextPeriodStatus = calculateNextPeriodStatus(period, payment.amountUsd);
 
     await runFirestoreTransaction(async (transaction) => {
@@ -143,15 +143,15 @@ export const paymentService = {
 
       transaction.update(paymentRef, {
         status: PaymentStatus.Confirmed,
-        confirmedAt,
+        confirmedAt: timestamp,
         confirmedBy: context.userId,
-        updatedAt: confirmedAt
+        updatedAt: timestamp
       });
 
       transaction.update(periodRef, {
         paidAmountUsd: FieldValue.increment(payment.amountUsd),
         status: nextPeriodStatus,
-        updatedAt: confirmedAt
+        updatedAt: timestamp
       });
     });
 
@@ -171,7 +171,7 @@ export const paymentService = {
       entityType: "payment",
       entityId: payment.id,
       after: {
-        payment: { ...payment, status: PaymentStatus.Confirmed, confirmedAt } as unknown as Record<string, unknown>,
+        payment: { ...payment, status: PaymentStatus.Confirmed, confirmedAt: timestamp } as unknown as Record<string, unknown>,
         billingPeriod: updatedPeriod as unknown as Record<string, unknown>
       }
     });
@@ -180,7 +180,7 @@ export const paymentService = {
       await this.handlePaidPeriod(payment.organizationId, updatedPeriod, subscription);
     }
 
-    const confirmedPayment = { ...payment, status: PaymentStatus.Confirmed, confirmedAt };
+    const confirmedPayment = { ...payment, status: PaymentStatus.Confirmed, confirmedAt: timestamp };
 
     await sendPaymentConfirmedNotification(context, subscription, confirmedPayment);
 

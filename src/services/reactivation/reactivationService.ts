@@ -150,8 +150,8 @@ export const reactivationService = {
 
     const quote = await this.calculateReactivationQuote(input.context, subscription.id);
 
-    if (!quote.canReactivate || roundMoney(input.expectedTotalUsd) !== quote.requiredUsd) {
-      throw new BusinessRuleError("El total de reactivación no coincide con la deuda calculada");
+    if (!quote.canReactivate) {
+      throw new BusinessRuleError("La suscripción no se puede reactivar");
     }
 
     const payments: Payment[] = [];

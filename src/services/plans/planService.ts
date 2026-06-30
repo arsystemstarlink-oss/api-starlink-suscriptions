@@ -184,6 +184,7 @@ export const planService = {
     return {
       plan,
       preview: false,
+      applied: true,
       affectedSubscriptions: affectedIds.length,
       changes
     };

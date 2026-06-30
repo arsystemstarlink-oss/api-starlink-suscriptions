@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { planService } from "../../services/plans/planService.js";
 import { requireAdmin } from "../middlewares/requestContext.js";
+import { authenticateRequired } from "../middlewares/authMiddleware.js";
 import { validateBody } from "../validators/validateBody.js";
 import {
   createPlanSchema,
@@ -29,14 +30,14 @@ function p(req: Request, name: string): string {
 
 export const planRouter = Router();
 
-planRouter.get("/", handler(async (req, res) => {
+planRouter.get("/", authenticateRequired, handler(async (req, res) => {
   const includeInactive = req.query.includeInactive === "true";
   const pagination = paginationQuerySchema.parse(req.query);
   const result = await planService.list(ctx(req), includeInactive, pagination);
   res.json(result);
 }));
 
-planRouter.get("/:planId", handler(async (req, res) => {
+planRouter.get("/:planId", authenticateRequired, handler(async (req, res) => {
   const plan = await planService.getById(ctx(req), p(req, "planId"));
   res.json(plan);
 }));

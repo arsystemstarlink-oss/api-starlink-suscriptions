@@ -34,6 +34,12 @@ export const clientService = {
       throw new BusinessRuleError("Ya existe un cliente con ese DNI");
     }
 
+    const existingByEmail = await clientRepository.getByEmail(input.context.organizationId, input.email);
+
+    if (existingByEmail) {
+      throw new BusinessRuleError("Ya existe un cliente con ese email");
+    }
+
     const client = await clientRepository.create({
       organizationId: input.context.organizationId,
       name: input.name,

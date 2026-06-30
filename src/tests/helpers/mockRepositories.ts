@@ -118,6 +118,15 @@ export const clientRepository = {
     return matches[0] ?? null;
   },
 
+  async getByEmail(organizationId: string, email: string): Promise<Client | null> {
+    const matches = fieldWhere(
+      [...store.clients.values()].filter((c) => c.organizationId === organizationId),
+      "email",
+      email
+    );
+    return matches[0] ?? null;
+  },
+
   async update(id: string, organizationId: string, data: Partial<Client>): Promise<void> {
     const existing = store.clients.get(id);
     if (existing && existing.organizationId === organizationId) {

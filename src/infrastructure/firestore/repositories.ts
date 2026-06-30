@@ -104,6 +104,19 @@ export const clientRepository = {
     return toData<Client>(snapshot.docs[0]);
   },
 
+  async getByEmail(organizationId: string, email: string): Promise<Client | null> {
+    const snapshot = await orgCol(organizationId, "clients")
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    return toData<Client>(snapshot.docs[0]);
+  },
+
 
   async update(id: string, organizationId: string, data: Partial<Client>): Promise<void> {
     await orgCol(organizationId, "clients").doc(id).update(sanitizeForFirestore({

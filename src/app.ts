@@ -8,6 +8,8 @@ import { apiRouter } from "./api/routes/index.js";
 import { authPublicRouter, authRouter } from "./api/routes/authRoutes.js";
 import { webhookRouter } from "./api/routes/communicationRoutes.js";
 import { globalRateLimiter, loginRateLimiter } from "./api/middlewares/rateLimiter.js";
+import { schedulerService } from "./services/cron/schedulerService.js";
+import { schedulerService } from "./services/cron/schedulerService.js";
 
 const app = express();
 
@@ -33,6 +35,11 @@ app.use(globalRateLimiter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/cron/config", (_req, res) => {
+  const status = schedulerService.getStatus();
+  res.json(status);
 });
 
 app.use("/api/auth/login", loginRateLimiter);

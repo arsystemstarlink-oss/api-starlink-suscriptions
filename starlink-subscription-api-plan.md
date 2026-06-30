@@ -575,7 +575,8 @@ Respuesta (`200`):
     "email": "admin@ejemplo.com",
     "name": "Administrador",
     "role": "admin"
-  }
+  },
+  "expiresIn": 3600
 }
 ```
 
@@ -617,11 +618,14 @@ Respuesta (`201`):
 ```json
 {
   "id": "user_456",
+  "organizationId": "default",
   "email": "cliente@ejemplo.com",
   "name": "Juan Pérez",
   "role": "client",
   "clientId": "client_123",
-  "isActive": true
+  "isActive": true,
+  "createdAt": "2026-06-29T12:00:00.000Z",
+  "updatedAt": "2026-06-29T12:00:00.000Z"
 }
 ```
 
@@ -754,10 +758,13 @@ Respuesta (`200`):
 ```json
 {
   "id": "user_123",
+  "organizationId": "default",
   "email": "admin@ejemplo.com",
   "name": "Administrador",
   "role": "admin",
-  "isActive": true
+  "isActive": true,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
@@ -1110,13 +1117,28 @@ Respuesta (`200`) con `preview: true`:
 
 ```json
 {
-  "affectedSubscriptions": 15,
-  "preview": true,
-  "changes": {
+  "plan": {
+    "id": "plan_001",
+    "name": "Starlink Residential",
     "priceUsd": 150,
     "lateFeeUsd": 15,
     "graceDays": 30
-  }
+  },
+  "preview": true,
+  "affectedSubscriptions": 15,
+  "changes": [
+    {
+      "subscriptionId": "sub_123",
+      "starlinkAccountId": "ACC-01-0001",
+      "status": "active",
+      "currentPriceUsd": 120,
+      "currentLateFeeUsd": 10,
+      "currentGraceDays": 30,
+      "newPriceUsd": 150,
+      "newLateFeeUsd": 15,
+      "newGraceDays": 30
+    }
+  ]
 }
 ```
 
@@ -1124,9 +1146,29 @@ Respuesta (`200`) con `preview: false`:
 
 ```json
 {
-  "affectedSubscriptions": 15,
+  "plan": {
+    "id": "plan_001",
+    "name": "Starlink Residential",
+    "priceUsd": 150,
+    "lateFeeUsd": 15,
+    "graceDays": 30
+  },
   "preview": false,
-  "applied": true
+  "applied": true,
+  "affectedSubscriptions": 15,
+  "changes": [
+    {
+      "subscriptionId": "sub_123",
+      "starlinkAccountId": "ACC-01-0001",
+      "status": "active",
+      "currentPriceUsd": 120,
+      "currentLateFeeUsd": 10,
+      "currentGraceDays": 30,
+      "newPriceUsd": 150,
+      "newLateFeeUsd": 15,
+      "newGraceDays": 30
+    }
+  ]
 }
 ```
 

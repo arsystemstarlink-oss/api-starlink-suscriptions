@@ -224,9 +224,16 @@ describe("Integration: auth routes", () => {
 
   describe("Authentication gate", () => {
     it("returns 403 for /api routes without JWT", async () => {
-      for (const path of ["/api/health", "/api/clients", "/api/plans", "/api/cron/config"]) {
+      for (const path of ["/api/clients", "/api/plans"]) {
         const res = await request(app).get(path);
         expect(res.status).toBe(403);
+      }
+    });
+
+    it("allows public routes without JWT", async () => {
+      for (const path of ["/api/health", "/api/cron/config"]) {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(200);
       }
     });
   });

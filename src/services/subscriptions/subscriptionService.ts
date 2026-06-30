@@ -112,7 +112,7 @@ export const subscriptionService = {
     reason: string;
   }) {
     const subscription = await this.getById(input.context, input.subscriptionId);
-    await clientService.getById(input.context, input.newClientId);
+    const newClient = await clientService.getById(input.context, input.newClientId);
 
     const before = { ...subscription };
     const updated: Subscription = {
@@ -120,6 +120,7 @@ export const subscriptionService = {
       clientId: input.newClientId,
       currentOwnerName: input.currentOwnerName,
       currentOwnerDni: input.currentOwnerDni,
+      starlinkEmail: newClient.email,
       updatedAt: new Date().toISOString()
     };
 
@@ -129,7 +130,8 @@ export const subscriptionService = {
       {
         clientId: input.newClientId,
         currentOwnerName: input.currentOwnerName,
-        currentOwnerDni: input.currentOwnerDni
+        currentOwnerDni: input.currentOwnerDni,
+        starlinkEmail: newClient.email
       }
     );
 
